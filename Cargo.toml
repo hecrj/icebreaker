@@ -1,0 +1,30 @@
+[package]
+name = "icebreaker"
+version = "0.1.0"
+authors = ["Héctor Ramón Jiménez <hector@hecrj.dev>"]
+edition = "2021"
+publish = false
+
+[dependencies]
+iced.git = "https://github.com/iced-rs/iced.git"
+iced.rev = "3c55e076688fd7453e5feb53fccf8139076af584"
+iced.features = ["tokio", "svg", "debug"]
+
+tokio.version = "1.38"
+tokio.features = ["fs", "io-util", "process", "time"]
+
+tokio-stream.version = "0.1"
+tokio-stream.features = ["io-util"]
+
+reqwest.version = "0.12"
+reqwest.features = ["json"]
+
+chrono.version = "0.4"
+chrono.features = ["serde"]
+
+futures = "0.3"
+thiserror = "1.0"
+serde = "1.0"
+serde_json = "1.0"
+itertools = "0.13"
+open = "5.2"
