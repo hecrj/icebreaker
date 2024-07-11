@@ -5,16 +5,16 @@ use iced::alignment::{self, Alignment};
 use iced::theme::{self, Theme};
 use iced::time::Duration;
 use iced::widget::{
-    self, button, column, container, horizontal_space, hover, iced, row, scrollable, text,
+    self, button, center, column, container, horizontal_space, hover, iced, row, scrollable, text,
     text_input, value,
 };
 use iced::{Color, Element, Font, Length, Padding, Task};
 
-#[derive(Default)]
 pub struct Search {
     models: Vec<Model>,
     search: String,
     search_temperature: usize,
+    is_searching: bool,
     error: Option<Error>,
 }
 
@@ -42,7 +42,13 @@ pub enum Event {
 impl Search {
     pub fn new() -> (Self, Task<Message>) {
         (
-            Self::default(),
+            Self {
+                models: Vec::new(),
+                search: String::new(),
+                search_temperature: 0,
+                is_searching: true,
+                error: None,
+            },
             Task::perform(Model::list(), Message::ModelsListed)
                 .then(|models| Task::batch([widget::focus_next(), Task::done(models)])),
         )
@@ -56,6 +62,7 @@ impl Search {
         match message {
             Message::ModelsListed(Ok(models)) => {
                 self.models = models;
+                self.is_searching = false;
 
                 (Task::none(), Event::None)
             }
@@ -79,6 +86,8 @@ impl Search {
                 self.search_temperature = self.search_temperature.saturating_sub(1);
 
                 if self.search_temperature == 0 {
+                    self.is_searching = true;
+
                     (
                         Task::perform(Model::search(self.search.clone()), Message::ModelsListed),
                         Event::None,
@@ -106,38 +115,46 @@ impl Search {
             .padding(10)
             .on_input(Message::SearchChanged);
 
-        let models = {
-            use itertools::Itertools;
+        let models: Element<_> =
+            {
+                use itertools::Itertools;
 
-            let search_terms: Vec<_> = self
-                .search
-                .trim()
-                .split(' ')
-                .map(str::to_lowercase)
-                .collect();
+                let search_terms: Vec<_> = self
+                    .search
+                    .trim()
+                    .split(' ')
+                    .map(str::to_lowercase)
+                    .collect();
 
-            let filtered_models = self.models.iter().filter(|model| {
-                self.search.is_empty()
-                    || search_terms
-                        .iter()
-                        .all(|term| model.name().to_lowercase().contains(term))
-            });
+                let mut filtered_models = self
+                    .models
+                    .iter()
+                    .filter(|model| {
+                        self.search.is_empty()
+                            || search_terms
+                                .iter()
+                                .all(|term| model.name().to_lowercase().contains(term))
+                    })
+                    .peekable();
 
-            scrollable(
-                column(
-                    filtered_models
-                        .chunks(2)
-                        .into_iter()
-                        .map(|chunk| row(chunk.into_iter().map(model_card)).spacing(10).into()),
-                )
-                .spacing(10)
-                .padding(Padding {
-                    right: 20.0,
-                    ..Padding::ZERO
-                }),
-            )
-            .height(Length::Fill)
-        };
+                if filtered_models.peek().is_none() {
+                    center(text(if self.is_searching || self.search_temperature > 0 {
+                        "Searching..."
+                    } else {
+                        "No models found!"
+                    }))
+                    .into()
+                } else {
+                    let cards =
+                        column(filtered_models.chunks(2).into_iter().map(|chunk| {
+                            row(chunk.into_iter().map(model_card)).spacing(10).into()
+                        }))
+                        .spacing(10)
+                        .padding(Padding::right(10));
+
+                    scrollable(cards).height(Length::Fill).embed_y(true).into()
+                }
+            };
 
         let footer = {
             let text = |content| text(content).font(Font::MONOSPACE).size(12);

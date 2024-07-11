@@ -146,7 +146,9 @@ impl Boot {
                                 .into()
                         }))
                         .spacing(10)
+                        .padding(Padding::right(10))
                     )
+                    .embed_y(true)
                 ]
                 .spacing(10)
                 .into()
