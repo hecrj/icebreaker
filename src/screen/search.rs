@@ -49,8 +49,10 @@ impl Search {
                 is_searching: true,
                 error: None,
             },
-            Task::perform(Model::list(), Message::ModelsListed)
-                .then(|models| Task::batch([widget::focus_next(), Task::done(models)])),
+            Task::batch([
+                Task::perform(Model::list(), Message::ModelsListed),
+                widget::focus_next(),
+            ]),
         )
     }
 
