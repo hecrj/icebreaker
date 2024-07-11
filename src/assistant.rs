@@ -2,7 +2,7 @@ use futures::{SinkExt, Stream, StreamExt};
 use serde::Deserialize;
 use serde_json::json;
 use tokio::fs;
-use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt};
+use tokio::io::{self, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
 use tokio::process;
 
 use std::fmt;
@@ -38,8 +38,98 @@ impl Assistant {
                 filename = file.name
             );
 
+            if fs::try_exists(&model_path).await? {
+                let _ = sender
+                    .send(BootEvent::Logged(format!(
+                        "{filename} found. Verifying...",
+                        filename = file.name
+                    )))
+                    .await;
+
+                let _ = sender
+                    .send(BootEvent::Progressed {
+                        stage: "Verifying model...",
+                        percent: 0,
+                    })
+                    .await;
+
+                let metadata = reqwest::get(format!(
+                    "https://huggingface.co/{model}/raw/main/{filename}",
+                    model = file.model.0,
+                    filename = file.name
+                ))
+                .await?
+                .text()
+                .await?;
+
+                if let Some((_, checksum)) = metadata
+                    .lines()
+                    .nth(1)
+                    .unwrap_or_default()
+                    .split_once("sha256:")
+                {
+                    use sha2::{Digest, Sha256};
+
+                    let metadata = fs::metadata(&model_path).await?;
+                    let mut model = io::BufReader::new(fs::File::open(&model_path).await?);
+                    let mut hasher = Sha256::new();
+                    let mut buffer = vec![0; 1024 * 1024 * 10];
+                    let mut progress = 0;
+                    let mut bytes_hashed = 0;
+
+                    loop {
+                        let n = model.read(&mut buffer).await?;
+
+                        if n == 0 {
+                            break;
+                        }
+
+                        hasher.update(&buffer[..n]);
+                        bytes_hashed += n;
+
+                        let new_progress =
+                            (100.0 * bytes_hashed as f32 / metadata.len() as f32).round() as u64;
+
+                        if new_progress > progress {
+                            progress = new_progress;
+
+                            let _ = sender
+                                .send(BootEvent::Progressed {
+                                    stage: "Verifying model...",
+                                    percent: progress,
+                                })
+                                .await;
+                        }
+                    }
+
+                    let hash = format!("{hash:x}", hash = hasher.finalize());
+
+                    if checksum == hash {
+                        let _ = sender
+                            .send(BootEvent::Logged(format!("Correct checksum! {hash}",)))
+                            .await;
+                    } else {
+                        let _ = sender
+                            .send(BootEvent::Logged(format!(
+                                "Invalid checksum. Deleting {filename}...",
+                                filename = file.name
+                            )))
+                            .await;
+
+                        fs::remove_file(&model_path).await?;
+                    }
+                }
+            }
+
             if !fs::try_exists(&model_path).await? {
-                let mut model = fs::File::create(&model_path).await?;
+                let _ = sender
+                    .send(BootEvent::Logged(format!(
+                        "{filename} not found. Starting download...",
+                        filename = file.name
+                    )))
+                    .await;
+
+                let mut model = io::BufWriter::new(fs::File::create(&model_path).await?);
 
                 let mut download = {
                     let url = format!(
@@ -77,7 +167,8 @@ impl Assistant {
 
                             let _ = sender
                                 .send(BootEvent::Progressed {
-                                    percent: progress / 2,
+                                    stage: "Downloading model...",
+                                    percent: progress,
                                 })
                                 .await;
                         }
@@ -89,7 +180,12 @@ impl Assistant {
                 model.flush().await?;
             }
 
-            let _ = sender.send(BootEvent::Progressed { percent: 50 }).await;
+            let _ = sender
+                .send(BootEvent::Progressed {
+                    stage: "Preparing container...",
+                    percent: 0,
+                })
+                .await;
 
             let _ = sender
                 .send(BootEvent::Logged(format!(
@@ -166,7 +262,12 @@ impl Assistant {
                 return Err(Error::DockerFailed("failed to create container"));
             }
 
-            let _ = sender.send(BootEvent::Progressed { percent: 75 }).await;
+            let _ = sender
+                .send(BootEvent::Progressed {
+                    stage: "Launching assistant...",
+                    percent: 99,
+                })
+                .await;
 
             let assistant = Self {
                 model: file.model,
@@ -185,8 +286,6 @@ impl Assistant {
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped())
                 .spawn()?;
-
-            let _ = sender.send(BootEvent::Progressed { percent: 99 }).await;
 
             let mut lines = {
                 use futures::stream;
@@ -399,7 +498,7 @@ impl Drop for Container {
 
 #[derive(Debug, Clone)]
 pub enum BootEvent {
-    Progressed { percent: u64 },
+    Progressed { stage: &'static str, percent: u64 },
     Logged(String),
     Finished(Assistant),
 }

@@ -1,6 +1,5 @@
 use crate::assistant::{Assistant, Backend, BootEvent, Error, File, Model};
 
-use iced::alignment::{self, Alignment};
 use iced::system;
 use iced::task::{self, Task};
 use iced::time::{self, Duration, Instant};
@@ -8,7 +7,7 @@ use iced::widget::{
     button, center, column, container, progress_bar, row, scrollable, stack, text, toggler,
     tooltip, value,
 };
-use iced::{Border, Element, Font, Length, Padding, Subscription, Theme};
+use iced::{Alignment, Border, Element, Font, Length, Padding, Subscription, Theme};
 
 pub struct Boot {
     model: Model,
@@ -21,6 +20,7 @@ enum State {
     Booting {
         logs: Vec<String>,
         error: Option<Error>,
+        stage: String,
         progress: u64,
         tick: usize,
         task: task::Handle,
@@ -85,6 +85,7 @@ impl Boot {
                 self.state = State::Booting {
                     logs: Vec::new(),
                     error: None,
+                    stage: "Loading...".to_owned(),
                     progress: 0,
                     tick: 0,
                     task: handle,
@@ -93,8 +94,15 @@ impl Boot {
                 (task, Event::None)
             }
             Message::Booting(Ok(event)) => match event {
-                BootEvent::Progressed { percent } => {
-                    if let State::Booting { progress, .. } = &mut self.state {
+                BootEvent::Progressed {
+                    stage: new_stage,
+                    percent,
+                } => {
+                    if let State::Booting {
+                        stage, progress, ..
+                    } = &mut self.state
+                    {
+                        *stage = new_stage.to_owned();
                         *progress = percent;
                     }
 
@@ -167,7 +175,7 @@ impl Boot {
                     )
                 };
 
-                let abort = button("Abort")
+                let abort = action("Abort")
                     .style(button::danger)
                     .on_press(Message::Abort);
 
@@ -200,27 +208,64 @@ impl Boot {
             State::Booting {
                 logs,
                 error,
+                stage,
                 progress,
                 tick,
                 ..
             } => {
+                let progress = {
+                    let stage = if error.is_none() {
+                        text!(
+                            "{stage} {spinner}",
+                            stage = stage,
+                            spinner = match tick % 4 {
+                                0 => "|",
+                                1 => "/",
+                                2 => "—",
+                                _ => "\\",
+                            }
+                        )
+                    } else {
+                        text(stage)
+                    }
+                    .font(Font::MONOSPACE);
+
+                    let bar = progress_bar(0.0..=100.0, *progress as f32).height(Length::Fill);
+
+                    let cancel = if error.is_none() {
+                        action("Cancel").style(button::danger)
+                    } else {
+                        action("Back").style(button::secondary)
+                    }
+                    .on_press(Message::Cancel);
+
+                    row![
+                        stack![
+                            if error.is_none() {
+                                bar
+                            } else {
+                                bar.style(progress_bar::danger)
+                            },
+                            center(stage.style(|theme: &Theme| text::Style {
+                                color: Some(theme.palette().background)
+                            }))
+                        ],
+                        cancel
+                    ]
+                    .height(Length::Shrink)
+                    .spacing(10)
+                };
+
+                let error = error
+                    .as_ref()
+                    .map(|error| value(error).font(Font::MONOSPACE).style(text::danger));
+
                 let logs = scrollable(
                     column(
                         logs.iter()
                             .map(|log| text(log).size(12).font(Font::MONOSPACE).into()),
                     )
-                    .push(if let Some(error) = error.as_ref() {
-                        value(error).font(Font::MONOSPACE).style(text::danger)
-                    } else {
-                        text(match tick % 4 {
-                            0 => "|",
-                            1 => "/",
-                            2 => "—",
-                            _ => "\\",
-                        })
-                        .size(12)
-                        .font(Font::MONOSPACE)
-                    })
+                    .push_maybe(error)
                     .spacing(5)
                     .padding(Padding {
                         right: 20.0,
@@ -231,29 +276,7 @@ impl Boot {
                 .width(Length::Fill)
                 .height(Length::Fill);
 
-                let cancel = container(
-                    if error.is_none() {
-                        button("Cancel").style(button::danger)
-                    } else {
-                        button("Back").style(button::secondary)
-                    }
-                    .on_press(Message::Cancel),
-                )
-                .width(Length::Fill)
-                .align_x(alignment::Horizontal::Right);
-
-                let progress = progress_bar(0.0..=100.0, *progress as f32).height(20);
-
-                column![
-                    stack![logs, cancel],
-                    if error.is_none() {
-                        progress
-                    } else {
-                        progress.style(progress_bar::danger)
-                    }
-                ]
-                .spacing(10)
-                .into()
+                column![progress, logs].spacing(10).into()
             }
         };
 
@@ -284,4 +307,8 @@ impl Boot {
             Subscription::none()
         }
     }
+}
+
+fn action(text: &str) -> button::Button<Message> {
+    button(container(text).center_x(Length::Fill)).width(70)
 }
