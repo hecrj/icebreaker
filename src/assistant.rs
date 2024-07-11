@@ -3,7 +3,7 @@ use futures::{SinkExt, Stream, StreamExt};
 use serde::Deserialize;
 use serde_json::json;
 use tokio::fs;
-use tokio::io::{self, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
+use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt};
 use tokio::process;
 
 use std::fmt;
@@ -75,55 +75,29 @@ impl Assistant {
                 .text()
                 .await?;
 
-                if let Some((_, checksum)) = metadata
+                let size: u64 = metadata
                     .lines()
-                    .nth(1)
+                    .next_back()
                     .unwrap_or_default()
-                    .split_once("sha256:")
-                {
-                    use sha2::{Digest, Sha256};
+                    .split_whitespace()
+                    .next_back()
+                    .unwrap_or_default()
+                    .parse()
+                    .unwrap_or_default();
 
-                    let metadata = fs::metadata(&model_path).await?;
-                    let mut model = io::BufReader::new(fs::File::open(&model_path).await?);
-                    let mut hasher = Sha256::new();
-                    let mut buffer = vec![0; 1024 * 1024 * 10];
-                    let mut progress = 0;
-                    let mut bytes_hashed = 0;
+                let file_metadata = fs::metadata(&model_path).await?;
 
-                    loop {
-                        let n = model.read(&mut buffer).await?;
+                if size == file_metadata.len() {
+                    sender.log(format!("File sizes match! {size} bytes")).await;
+                } else {
+                    sender
+                        .log(format!(
+                            "Invalid file size. Deleting {filename}...",
+                            filename = file.name
+                        ))
+                        .await;
 
-                        if n == 0 {
-                            break;
-                        }
-
-                        hasher.update(&buffer[..n]);
-                        bytes_hashed += n;
-
-                        let new_progress =
-                            (100.0 * bytes_hashed as f32 / metadata.len() as f32).round() as u64;
-
-                        if new_progress > progress {
-                            progress = new_progress;
-
-                            sender.progress("Verifying model...", progress).await;
-                        }
-                    }
-
-                    let hash = format!("{hash:x}", hash = hasher.finalize());
-
-                    if checksum == hash {
-                        sender.log(format!("Correct checksum! {hash}")).await;
-                    } else {
-                        sender
-                            .log(format!(
-                                "Invalid checksum. Deleting {filename}...",
-                                filename = file.name
-                            ))
-                            .await;
-
-                        fs::remove_file(&model_path).await?;
-                    }
+                    fs::remove_file(&model_path).await?;
                 }
             }
 

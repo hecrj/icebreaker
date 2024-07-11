@@ -26,9 +26,5 @@ futures = "0.3"
 thiserror = "1.0"
 serde = "1.0"
 serde_json = "1.0"
-sha2 = "0.10"
 itertools = "0.13"
 open = "5.2"
-
-[profile.dev.package.sha2]
-opt-level = 3
