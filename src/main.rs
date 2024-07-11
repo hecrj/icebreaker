@@ -10,7 +10,7 @@ use crate::screen::Screen;
 use iced::{Element, Subscription, Task, Theme};
 
 pub fn main() -> iced::Result {
-    iced::application("AI Chat - Iced", Chat::update, Chat::view)
+    iced::application(Chat::title, Chat::update, Chat::view)
         .font(include_bytes!("../fonts/chat-icons.ttf"))
         .subscription(Chat::subscription)
         .theme(Chat::theme)
@@ -40,6 +40,14 @@ impl Chat {
         )
     }
 
+    fn title(&self) -> String {
+        match &self.screen {
+            Screen::Search(search) => search.title(),
+            Screen::Boot(boot) => boot.title(),
+            Screen::Conversation(conversation) => conversation.title(),
+        }
+    }
+
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Search(message) => {
@@ -49,8 +57,7 @@ impl Chat {
                     match event {
                         search::Event::None => {}
                         search::Event::ModelSelected(model) => {
-                            self.screen =
-                                Screen::Boot(screen::Boot::new(model));
+                            self.screen = Screen::Boot(screen::Boot::new(model));
                         }
                     };
 
@@ -66,8 +73,7 @@ impl Chat {
                     let event_task = match event {
                         boot::Event::None => Task::none(),
                         boot::Event::Finished(assistant) => {
-                            let (conversation, task) =
-                                screen::Conversation::new(assistant);
+                            let (conversation, task) = screen::Conversation::new(assistant);
 
                             self.screen = Screen::Conversation(conversation);
 
@@ -103,9 +109,7 @@ impl Chat {
         match &self.screen {
             Screen::Search(search) => search.view().map(Message::Search),
             Screen::Boot(boot) => boot.view().map(Message::Boot),
-            Screen::Conversation(conversation) => {
-                conversation.view().map(Message::Conversation)
-            }
+            Screen::Conversation(conversation) => conversation.view().map(Message::Conversation),
         }
     }
 

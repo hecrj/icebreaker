@@ -48,6 +48,10 @@ impl Search {
         )
     }
 
+    pub fn title(&self) -> String {
+        "Icebreaker".to_owned()
+    }
+
     pub fn update(&mut self, message: Message) -> (Task<Message>, Event) {
         match message {
             Message::ModelsListed(Ok(models)) => {

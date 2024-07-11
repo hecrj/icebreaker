@@ -1,8 +1,6 @@
 use crate::assistant::{self, Assistant, ChatError, ChatEvent};
 
-use iced::widget::{
-    self, center, column, container, scrollable, text, text_input,
-};
+use iced::widget::{self, center, column, container, scrollable, text, text_input};
 use iced::{Alignment, Border, Element, Font, Length, Padding, Task, Theme};
 
 pub struct Conversation {
@@ -32,6 +30,10 @@ impl Conversation {
             },
             widget::focus_next(),
         )
+    }
+
+    pub fn title(&self) -> String {
+        format!("{name} - Icebreaker", name = self.assistant.name())
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {

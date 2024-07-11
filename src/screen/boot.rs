@@ -4,8 +4,7 @@ use iced::alignment::{self, Alignment};
 use iced::task::{self, Task};
 use iced::time::{self, Duration, Instant};
 use iced::widget::{
-    button, center, column, container, progress_bar, row, scrollable, stack,
-    text, value,
+    button, center, column, container, progress_bar, row, scrollable, stack, text, value,
 };
 use iced::{Border, Element, Font, Length, Padding, Subscription, Theme};
 
@@ -48,12 +47,20 @@ impl Boot {
         }
     }
 
+    pub fn title(&self) -> String {
+        match &self.state {
+            State::Idle => format!("Booting {name} - Icebreaker", name = self.model.name()),
+            State::Booting { progress, .. } => format!(
+                "{progress}% - Booting {name} - Icebreaker",
+                name = self.model.name()
+            ),
+        }
+    }
+
     pub fn update(&mut self, message: Message) -> (Task<Message>, Event) {
         match message {
             Message::Boot(file) => {
-                let (task, handle) =
-                    Task::run(Assistant::boot(file), Message::Booting)
-                        .abortable();
+                let (task, handle) = Task::run(Assistant::boot(file), Message::Booting).abortable();
 
                 self.state = State::Booting {
                     logs: Vec::new(),
@@ -80,9 +87,7 @@ impl Boot {
 
                     (Task::none(), Event::None)
                 }
-                BootEvent::Finished(assistant) => {
-                    (Task::none(), Event::Finished(assistant))
-                }
+                BootEvent::Finished(assistant) => (Task::none(), Event::Finished(assistant)),
             },
             Message::Booting(Err(new_error)) => {
                 if let State::Booting { error, .. } = &mut self.state {
@@ -129,11 +134,8 @@ impl Boot {
                 .align_x(alignment::Horizontal::Right);
 
                 column![
-                    row![
-                        text("Select a file to boot:").width(Length::Fill),
-                        abort
-                    ]
-                    .align_items(Alignment::Center),
+                    row![text("Select a file to boot:").width(Length::Fill), abort]
+                        .align_items(Alignment::Center),
                     scrollable(
                         column(self.model.files.iter().map(|file| {
                             button(text(&file.name).font(Font::MONOSPACE))
@@ -158,9 +160,10 @@ impl Boot {
                 ..
             } => {
                 let logs = scrollable(
-                    column(logs.iter().map(|log| {
-                        text(log).size(12).font(Font::MONOSPACE).into()
-                    }))
+                    column(
+                        logs.iter()
+                            .map(|log| text(log).size(12).font(Font::MONOSPACE).into()),
+                    )
                     .push(if let Some(error) = error.as_ref() {
                         value(error).font(Font::MONOSPACE).style(text::danger)
                     } else {
@@ -194,8 +197,7 @@ impl Boot {
                 .width(Length::Fill)
                 .align_x(alignment::Horizontal::Right);
 
-                let progress =
-                    progress_bar(0.0..=100.0, *progress as f32).height(20);
+                let progress = progress_bar(0.0..=100.0, *progress as f32).height(20);
 
                 column![
                     stack![logs, cancel],
