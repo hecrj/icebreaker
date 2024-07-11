@@ -8,7 +8,7 @@ publish = false
 [dependencies]
 iced.git = "https://github.com/iced-rs/iced.git"
 iced.rev = "c63a81f68396ccd53ab757f1bdaeee6ca998d168"
-iced.features = ["tokio", "svg", "debug"]
+iced.features = ["tokio", "svg", "system", "debug"]
 
 tokio.version = "1.38"
 tokio.features = ["fs", "io-util", "process", "time"]

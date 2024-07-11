@@ -1,16 +1,18 @@
-use crate::assistant::{Assistant, BootEvent, Error, File, Model};
+use crate::assistant::{Assistant, Backend, BootEvent, Error, File, Model};
 
 use iced::alignment::{self, Alignment};
+use iced::system;
 use iced::task::{self, Task};
 use iced::time::{self, Duration, Instant};
 use iced::widget::{
-    button, center, column, container, progress_bar, row, scrollable, stack, text, value,
+    button, center, column, container, progress_bar, row, scrollable, stack, text, toggler, value,
 };
 use iced::{Border, Element, Font, Length, Padding, Subscription, Theme};
 
 pub struct Boot {
     model: Model,
     state: State,
+    use_cuda: bool,
 }
 
 enum State {
@@ -31,6 +33,7 @@ pub enum Message {
     Tick(Instant),
     Cancel,
     Abort,
+    UseCUDAToggled(bool),
 }
 
 pub enum Event {
@@ -40,10 +43,15 @@ pub enum Event {
 }
 
 impl Boot {
-    pub fn new(model: Model) -> Self {
+    pub fn new(model: Model, system: Option<&system::Information>) -> Self {
+        let use_cuda = system
+            .map(|system| system.graphics_adapter.contains("NVIDIA"))
+            .unwrap_or_default();
+
         Self {
             model: model.clone(),
             state: State::Idle,
+            use_cuda,
         }
     }
 
@@ -60,7 +68,18 @@ impl Boot {
     pub fn update(&mut self, message: Message) -> (Task<Message>, Event) {
         match message {
             Message::Boot(file) => {
-                let (task, handle) = Task::run(Assistant::boot(file), Message::Booting).abortable();
+                let (task, handle) = Task::run(
+                    Assistant::boot(
+                        file,
+                        if self.use_cuda {
+                            Backend::CUDA
+                        } else {
+                            Backend::CPU
+                        },
+                    ),
+                    Message::Booting,
+                )
+                .abortable();
 
                 self.state = State::Booting {
                     logs: Vec::new(),
@@ -113,6 +132,11 @@ impl Boot {
                 (Task::none(), Event::None)
             }
             Message::Abort => (Task::none(), Event::Aborted),
+            Message::UseCUDAToggled(use_cuda) => {
+                self.use_cuda = use_cuda;
+
+                (Task::none(), Event::None)
+            }
         }
     }
 
@@ -125,17 +149,25 @@ impl Boot {
 
         let state: Element<_> = match &self.state {
             State::Idle => {
-                let abort = container(
-                    button("Abort")
-                        .style(button::danger)
-                        .on_press(Message::Abort),
+                let use_cuda = toggler(
+                    Some("Use CUDA".to_owned()),
+                    self.use_cuda,
+                    Message::UseCUDAToggled,
                 )
-                .width(Length::Fill)
-                .align_x(alignment::Horizontal::Right);
+                .width(Length::Shrink);
+
+                let abort = button("Abort")
+                    .style(button::danger)
+                    .on_press(Message::Abort);
 
                 column![
-                    row![text("Select a file to boot:").width(Length::Fill), abort]
-                        .align_items(Alignment::Center),
+                    row![
+                        text("Select a file to boot:").width(Length::Fill),
+                        use_cuda,
+                        abort
+                    ]
+                    .spacing(10)
+                    .align_items(Alignment::Center),
                     scrollable(
                         column(self.model.files.iter().map(|file| {
                             button(text(&file.name).font(Font::MONOSPACE))

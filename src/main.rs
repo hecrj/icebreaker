@@ -7,6 +7,7 @@ use crate::screen::conversation;
 use crate::screen::search;
 use crate::screen::Screen;
 
+use iced::system;
 use iced::{Element, Subscription, Task, Theme};
 
 pub fn main() -> iced::Result {
@@ -19,6 +20,7 @@ pub fn main() -> iced::Result {
 
 struct Chat {
     screen: Screen,
+    system: Option<system::Information>,
 }
 
 #[derive(Debug, Clone)]
@@ -26,6 +28,7 @@ enum Message {
     Search(search::Message),
     Boot(boot::Message),
     Conversation(conversation::Message),
+    SystemFetched(system::Information),
 }
 
 impl Chat {
@@ -35,8 +38,12 @@ impl Chat {
         (
             Self {
                 screen: Screen::Search(search),
+                system: None,
             },
-            task.map(Message::Search),
+            Task::batch([
+                system::fetch_information().map(Message::SystemFetched),
+                task.map(Message::Search),
+            ]),
         )
     }
 
@@ -57,7 +64,8 @@ impl Chat {
                     match event {
                         search::Event::None => {}
                         search::Event::ModelSelected(model) => {
-                            self.screen = Screen::Boot(screen::Boot::new(model));
+                            self.screen =
+                                Screen::Boot(screen::Boot::new(model, self.system.as_ref()));
                         }
                     };
 
@@ -101,6 +109,11 @@ impl Chat {
                 } else {
                     Task::none()
                 }
+            }
+            Message::SystemFetched(system) => {
+                self.system = Some(system);
+
+                Task::none()
             }
         }
     }

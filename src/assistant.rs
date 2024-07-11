@@ -14,13 +14,21 @@ pub struct Assistant {
     _container: Arc<Container>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Backend {
+    CPU,
+    CUDA,
+}
+
 impl Assistant {
-    const LLAMA_CPP_CONTAINER: &'static str = "ghcr.io/ggerganov/llama.cpp:server-cuda--b1-a59f8fd";
+    const LLAMA_CPP_CONTAINER_CPU: &'static str = "ghcr.io/ggerganov/llama.cpp:server--b1-a59f8fd";
+    const LLAMA_CPP_CONTAINER_CUDA: &'static str =
+        "ghcr.io/ggerganov/llama.cpp:server-cuda--b1-a59f8fd";
 
     const MODELS_DIR: &'static str = "./models";
     const HOST_PORT: u64 = 8080;
 
-    pub fn boot(file: File) -> impl Stream<Item = Result<BootEvent, Error>> {
+    pub fn boot(file: File, backend: Backend) -> impl Stream<Item = Result<BootEvent, Error>> {
         iced::stream::try_channel(1, move |mut sender| async move {
             let _ = fs::create_dir_all(Self::MODELS_DIR).await?;
 
@@ -90,20 +98,37 @@ impl Assistant {
                 )))
                 .await;
 
-            let mut docker = process::Command::new("docker")
-                .args(
+            let command = match backend {
+                Backend::CPU => {
+                    format!(
+                        "create --rm -p {port}:80 -v {volume}:/models \
+                            {container} --model models/{filename} --conversation \
+                            --port 80 --host 0.0.0.0",
+                        filename = file.name,
+                        container = Self::LLAMA_CPP_CONTAINER_CPU,
+                        port = Self::HOST_PORT,
+                        volume = Self::MODELS_DIR,
+                    )
+                }
+                Backend::CUDA => {
                     format!(
                         "create --rm --gpus all -p {port}:80 -v {volume}:/models \
                             {container} --model models/{filename} --conversation \
                             --port 80 --host 0.0.0.0 --gpu-layers 40",
                         filename = file.name,
-                        container = Self::LLAMA_CPP_CONTAINER,
+                        container = Self::LLAMA_CPP_CONTAINER_CUDA,
                         port = Self::HOST_PORT,
                         volume = Self::MODELS_DIR,
                     )
-                    .split(' ')
-                    .map(str::trim)
-                    .filter(|arg| !arg.is_empty()),
+                }
+            };
+
+            let mut docker = process::Command::new("docker")
+                .args(
+                    command
+                        .split(' ')
+                        .map(str::trim)
+                        .filter(|arg| !arg.is_empty()),
                 )
                 .kill_on_drop(true)
                 .stdout(std::process::Stdio::piped())
