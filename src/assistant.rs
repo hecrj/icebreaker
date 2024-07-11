@@ -15,8 +15,7 @@ pub struct Assistant {
 }
 
 impl Assistant {
-    const LLAMA_CPP_CONTAINER: &'static str =
-        "ghcr.io/ggerganov/llama.cpp:server-cuda--b1-a59f8fd";
+    const LLAMA_CPP_CONTAINER: &'static str = "ghcr.io/ggerganov/llama.cpp:server-cuda--b1-a59f8fd";
 
     const MODELS_DIR: &'static str = "./models";
     const HOST_PORT: u64 = 8080;
@@ -56,8 +55,7 @@ impl Assistant {
 
                     if let Some(model_size) = model_size {
                         let new_progress =
-                            (100.0 * downloaded as f32 / model_size as f32)
-                                .round() as u64;
+                            (100.0 * downloaded as f32 / model_size as f32).round() as u64;
 
                         if new_progress > progress {
                             progress = new_progress;
@@ -115,9 +113,7 @@ impl Assistant {
             let notify_progress = {
                 let mut sender = sender.clone();
 
-                let output = io::BufReader::new(
-                    docker.stderr.take().expect("piped stderr"),
-                );
+                let output = io::BufReader::new(docker.stderr.take().expect("piped stderr"));
 
                 async move {
                     let mut lines = output.lines();
@@ -131,15 +127,14 @@ impl Assistant {
             let _ = tokio::task::spawn(notify_progress);
 
             let container = {
-                let output = io::BufReader::new(
-                    docker.stdout.take().expect("piped stdout"),
-                );
+                let output = io::BufReader::new(docker.stdout.take().expect("piped stdout"));
 
                 let mut lines = output.lines();
 
-                lines.next_line().await?.ok_or_else(|| {
-                    Error::DockerFailed("no container id returned by docker")
-                })?
+                lines
+                    .next_line()
+                    .await?
+                    .ok_or_else(|| Error::DockerFailed("no container id returned by docker"))?
             };
 
             if !docker.wait().await?.success() {
@@ -172,13 +167,9 @@ impl Assistant {
                 use futures::stream;
                 use tokio_stream::wrappers::LinesStream;
 
-                let stdout = io::BufReader::new(
-                    logs.stdout.take().expect("piped stdout"),
-                );
+                let stdout = io::BufReader::new(logs.stdout.take().expect("piped stdout"));
 
-                let stderr = io::BufReader::new(
-                    logs.stderr.take().expect("piped stderr"),
-                );
+                let stderr = io::BufReader::new(logs.stderr.take().expect("piped stderr"));
 
                 stream::select(
                     LinesStream::new(stdout.lines()),
@@ -221,9 +212,7 @@ impl Assistant {
                 let messages: Vec<_> = history
                     .iter()
                     .map(|message| match message {
-                        Message::Assistant(content) => {
-                            ("assistant", content.as_str())
-                        }
+                        Message::Assistant(content) => ("assistant", content.as_str()),
                         Message::User(content) => ("user", content.as_str()),
                     })
                     .chain([("user", message.as_str())])
@@ -254,9 +243,7 @@ impl Assistant {
                 .await;
 
             let _ = sender
-                .send(ChatEvent::MessageAdded(
-                    Message::Assistant(String::new()),
-                ))
+                .send(ChatEvent::MessageAdded(Message::Assistant(String::new())))
                 .await;
 
             let mut message = String::new();
@@ -303,9 +290,9 @@ impl Assistant {
                         }
 
                         let _ = sender
-                            .send(ChatEvent::LastMessageChanged(
-                                Message::Assistant(message.trim().to_owned()),
-                            ))
+                            .send(ChatEvent::LastMessageChanged(Message::Assistant(
+                                message.trim().to_owned(),
+                            )))
                             .await;
                     };
                 }
