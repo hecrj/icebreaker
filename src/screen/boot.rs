@@ -5,7 +5,8 @@ use iced::system;
 use iced::task::{self, Task};
 use iced::time::{self, Duration, Instant};
 use iced::widget::{
-    button, center, column, container, progress_bar, row, scrollable, stack, text, toggler, value,
+    button, center, column, container, progress_bar, row, scrollable, stack, text, toggler,
+    tooltip, value,
 };
 use iced::{Border, Element, Font, Length, Padding, Subscription, Theme};
 
@@ -149,12 +150,22 @@ impl Boot {
 
         let state: Element<_> = match &self.state {
             State::Idle => {
-                let use_cuda = toggler(
-                    Some("Use CUDA".to_owned()),
-                    self.use_cuda,
-                    Message::UseCUDAToggled,
-                )
-                .width(Length::Shrink);
+                let use_cuda = {
+                    let toggle = toggler(
+                        Some("Use CUDA".to_owned()),
+                        self.use_cuda,
+                        Message::UseCUDAToggled,
+                    )
+                    .width(Length::Shrink);
+
+                    tooltip(
+                        toggle,
+                        container(text("Only supported on NVIDIA cards!").size(12))
+                            .padding(5)
+                            .style(container::rounded_box),
+                        tooltip::Position::Left,
+                    )
+                };
 
                 let abort = button("Abort")
                     .style(button::danger)
