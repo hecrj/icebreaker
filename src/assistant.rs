@@ -8,6 +8,7 @@ use tokio::process;
 
 use std::fmt;
 use std::sync::Arc;
+use std::time::Instant;
 
 #[derive(Debug, Clone)]
 pub struct Assistant {
@@ -127,9 +128,16 @@ impl Assistant {
                 let model_size = download.content_length();
                 let mut downloaded = 0;
                 let mut progress = 0;
+                let start = Instant::now();
+
+                sender
+                    .log(format!("Downloading {file}...", file = file.name))
+                    .await;
 
                 while let Some(chunk) = download.chunk().await? {
                     downloaded += chunk.len() as u64;
+
+                    let speed = downloaded as f32 / start.elapsed().as_secs_f32();
 
                     if let Some(model_size) = model_size {
                         let new_progress =
@@ -138,14 +146,18 @@ impl Assistant {
                         if new_progress > progress {
                             progress = new_progress;
 
-                            sender
+                            sender.progress("Downloading model...", progress).await;
+
+                            if progress % 5 == 0 {
+                                sender
                                 .log(format!(
-                                    "Downloading {file}... {progress}%",
-                                    file = file.name,
+                                    "=> {progress}% {downloaded:.2}GB of {model_size:.2}GB @ {speed:.2} MB/s",
+                                    downloaded = downloaded as f32 / 10f32.powi(9),
+                                    model_size = model_size as f32 / 10f32.powi(9),
+                                    speed = speed / 10f32.powi(6),
                                 ))
                                 .await;
-
-                            sender.progress("Downloading model...", progress).await;
+                            }
                         }
                     }
 
