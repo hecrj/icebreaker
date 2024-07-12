@@ -22,6 +22,13 @@ pub enum Message {
     InputSubmitted,
     Chatting(Result<ChatEvent, ChatError>),
     Copy(assistant::Message),
+    Back,
+}
+
+pub enum Action {
+    None,
+    Run(Task<Message>),
+    Back,
 }
 
 impl Conversation {
@@ -42,21 +49,21 @@ impl Conversation {
         format!("{name} - Icebreaker", name = self.assistant.name())
     }
 
-    pub fn update(&mut self, message: Message) -> Task<Message> {
+    pub fn update(&mut self, message: Message) -> Action {
         match message {
             Message::InputChanged(input) => {
                 self.input = input;
                 self.error = None;
 
-                Task::none()
+                Action::None
             }
             Message::InputSubmitted => {
                 self.is_sending = true;
 
-                Task::run(
+                Action::Run(Task::run(
                     self.assistant.chat(&self.history, &self.input),
                     Message::Chatting,
-                )
+                ))
             }
             Message::Chatting(Ok(event)) => {
                 match event {
@@ -77,28 +84,46 @@ impl Conversation {
                     }
                 }
 
-                Task::none()
+                Action::None
             }
             Message::Chatting(Err(error)) => {
                 self.error = Some(dbg!(error));
                 self.is_sending = false;
 
-                Task::none()
+                Action::None
             }
-            Message::Copy(message) => clipboard::write(message.content().to_owned()),
+            Message::Copy(message) => Action::Run(clipboard::write(message.content().to_owned())),
+            Message::Back => Action::Back,
         }
     }
 
     pub fn view(&self) -> Element<Message> {
-        let title = text!("{name}", name = self.assistant.name())
-            .font(Font::MONOSPACE)
-            .size(20);
+        let header = {
+            let title = text!("{name}", name = self.assistant.name())
+                .font(Font::MONOSPACE)
+                .size(20)
+                .width(Fill)
+                .align_x(Center);
+
+            let back = tooltip(
+                button(text("←").size(20))
+                    .padding(0)
+                    .on_press(Message::Back)
+                    .style(button::text),
+                container(text("Back to search").size(14))
+                    .padding(5)
+                    .style(container::rounded_box),
+                tooltip::Position::Right,
+            );
+
+            hover(title, container(back).center_y(Fill))
+        };
 
         let messages: Element<_> = if self.history.is_empty() {
             center(
                 column![
                     text("Your assistant is ready."),
-                    text("Say something! ↓").style(text::primary)
+                    text("Break the ice! ↓").style(text::primary)
                 ]
                 .spacing(10)
                 .align_x(Center),
@@ -127,7 +152,7 @@ impl Conversation {
             }
         };
 
-        column![title, messages, input]
+        column![header, messages, input]
             .spacing(10)
             .padding(10)
             .align_x(Center)

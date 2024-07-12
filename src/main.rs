@@ -29,6 +29,7 @@ enum Message {
     Boot(boot::Message),
     Conversation(conversation::Message),
     SystemFetched(system::Information),
+    Escape,
 }
 
 impl Chat {
@@ -88,13 +89,7 @@ impl Chat {
 
                             task.map(Message::Conversation)
                         }
-                        boot::Action::Abort => {
-                            let (search, task) = screen::Search::new();
-
-                            self.screen = Screen::Search(search);
-
-                            task.map(Message::Search)
-                        }
+                        boot::Action::Abort => self.search(),
                     }
                 } else {
                     Task::none()
@@ -102,9 +97,13 @@ impl Chat {
             }
             Message::Conversation(message) => {
                 if let Screen::Conversation(conversation) = &mut self.screen {
-                    let task = conversation.update(message);
+                    let action = conversation.update(message);
 
-                    task.map(Message::Conversation)
+                    match action {
+                        conversation::Action::None => Task::none(),
+                        conversation::Action::Run(task) => task.map(Message::Conversation),
+                        conversation::Action::Back => self.search(),
+                    }
                 } else {
                     Task::none()
                 }
@@ -113,6 +112,13 @@ impl Chat {
                 self.system = Some(system);
 
                 Task::none()
+            }
+            Message::Escape => {
+                if matches!(self.screen, Screen::Search(_)) {
+                    Task::none()
+                } else {
+                    self.search()
+                }
             }
         }
     }
@@ -126,13 +132,30 @@ impl Chat {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        match &self.screen {
+        use iced::keyboard;
+
+        let screen = match &self.screen {
             Screen::Boot(boot) => boot.subscription().map(Message::Boot),
             Screen::Search(_) | Screen::Conversation(_) => Subscription::none(),
-        }
+        };
+
+        let hotkeys = keyboard::on_key_press(|key, _modifiers| match key {
+            keyboard::Key::Named(keyboard::key::Named::Escape) => Some(Message::Escape),
+            _ => None,
+        });
+
+        Subscription::batch([screen, hotkeys])
     }
 
     fn theme(&self) -> Theme {
         Theme::TokyoNight
+    }
+
+    fn search(&mut self) -> Task<Message> {
+        let (search, task) = screen::Search::new();
+
+        self.screen = Screen::Search(search);
+
+        task.map(Message::Search)
     }
 }
