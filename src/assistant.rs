@@ -319,6 +319,7 @@ impl Assistant {
         history: &[Message],
         message: &str,
     ) -> impl Stream<Item = Result<ChatEvent, ChatError>> {
+        let model = self.model.clone();
         let history = history.to_vec();
         let message = message.to_owned();
 
@@ -347,7 +348,7 @@ impl Assistant {
                         port = Self::HOST_PORT
                     ))
                     .json(&json!({
-                        "model": "tgi",
+                        "model": format!("{model}", model = model.name()),
                         "messages": messages,
                         "stream": true,
                         "cache_prompt": true,
