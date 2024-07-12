@@ -1,7 +1,6 @@
 use crate::assistant::{Error, Model};
 use crate::icon;
 
-use iced::padding;
 use iced::theme::{self, Theme};
 use iced::time::Duration;
 use iced::widget::{
@@ -151,10 +150,9 @@ impl Search {
                         column(filtered_models.chunks(2).into_iter().map(|chunk| {
                             row(chunk.into_iter().map(model_card)).spacing(10).into()
                         }))
-                        .spacing(10)
-                        .padding(padding::right(10));
+                        .spacing(10);
 
-                    scrollable(cards).height(Fill).embed_y(true).into()
+                    scrollable(cards).height(Fill).spacing(10).into()
                 }
             };
 
