@@ -1,5 +1,7 @@
 use crate::assistant::{Assistant, Backend, BootEvent, Error, File, Model};
 
+use iced::border;
+use iced::padding;
 use iced::system;
 use iced::task::{self, Task};
 use iced::time::{self, Duration, Instant};
@@ -7,7 +9,7 @@ use iced::widget::{
     button, center, column, container, progress_bar, row, scrollable, stack, text, toggler,
     tooltip, value,
 };
-use iced::{Alignment, Border, Element, Font, Length, Padding, Subscription, Theme};
+use iced::{Center, Element, Fill, Font, Shrink, Subscription, Theme};
 
 pub struct Boot {
     model: Model,
@@ -160,8 +162,7 @@ impl Boot {
                         Some("Use CUDA".to_owned()),
                         self.use_cuda,
                         Message::UseCUDAToggled,
-                    )
-                    .width(Length::Shrink);
+                    );
 
                     tooltip(
                         toggle,
@@ -177,24 +178,20 @@ impl Boot {
                     .on_press(Message::Abort);
 
                 column![
-                    row![
-                        text("Select a file to boot:").width(Length::Fill),
-                        use_cuda,
-                        abort
-                    ]
-                    .spacing(10)
-                    .align_items(Alignment::Center),
+                    row![text("Select a file to boot:").width(Fill), use_cuda, abort]
+                        .spacing(10)
+                        .align_y(Center),
                     scrollable(
                         column(self.model.files.iter().map(|file| {
                             button(text(&file.name).font(Font::MONOSPACE))
                                 .on_press(Message::Boot(file.clone()))
-                                .width(Length::Fill)
+                                .width(Fill)
                                 .padding(10)
                                 .style(button::secondary)
                                 .into()
                         }))
                         .spacing(10)
-                        .padding(Padding::right(10))
+                        .padding(padding::right(10))
                     )
                     .embed_y(true)
                 ]
@@ -227,7 +224,7 @@ impl Boot {
                     }
                     .font(Font::MONOSPACE);
 
-                    let bar = progress_bar(0.0..=100.0, *progress as f32).height(Length::Fill);
+                    let bar = progress_bar(0.0..=100.0, *progress as f32).height(Fill);
 
                     let cancel = if error.is_none() {
                         action("Cancel").style(button::danger)
@@ -249,7 +246,7 @@ impl Boot {
                         ],
                         cancel
                     ]
-                    .height(Length::Shrink)
+                    .height(Shrink)
                     .spacing(10)
                 };
 
@@ -264,14 +261,11 @@ impl Boot {
                     )
                     .push_maybe(error)
                     .spacing(5)
-                    .padding(Padding {
-                        right: 20.0,
-                        ..Padding::ZERO
-                    }),
+                    .padding(padding::right(20)),
                 )
-                .align_y(scrollable::Alignment::End)
-                .width(Length::Fill)
-                .height(Length::Fill);
+                .anchor_y(scrollable::Anchor::End)
+                .width(Fill)
+                .height(Fill);
 
                 column![progress, logs].spacing(10).into()
             }
@@ -280,21 +274,15 @@ impl Boot {
         let frame = container(state)
             .padding(10)
             .style(|theme: &Theme| container::Style {
-                border: Border::rounded(2)
-                    .with_width(1)
-                    .with_color(theme.palette().text),
+                border: border::rounded(2).width(1).color(theme.palette().text),
                 ..container::Style::default()
             })
             .width(800)
             .height(600);
 
-        center(
-            column![title, frame]
-                .spacing(10)
-                .align_items(Alignment::Center),
-        )
-        .padding(10)
-        .into()
+        center(column![title, frame].spacing(10).align_x(Center))
+            .padding(10)
+            .into()
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
@@ -307,5 +295,5 @@ impl Boot {
 }
 
 fn action(text: &str) -> button::Button<Message> {
-    button(container(text).center_x(Length::Fill)).width(70)
+    button(container(text).center_x(Fill)).width(70)
 }

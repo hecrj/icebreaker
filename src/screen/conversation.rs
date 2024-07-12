@@ -1,12 +1,12 @@
 use crate::assistant::{self, Assistant, ChatError, ChatEvent};
 use crate::icon;
 
-use iced::alignment::{self, Alignment};
 use iced::clipboard;
+use iced::padding;
 use iced::widget::{
     self, button, center, column, container, hover, scrollable, text, text_input, tooltip,
 };
-use iced::{Border, Element, Font, Length, Padding, Task, Theme};
+use iced::{Center, Element, Fill, Font, Left, Right, Task, Theme};
 
 pub struct Conversation {
     assistant: Assistant,
@@ -101,20 +101,17 @@ impl Conversation {
                     text("Say something! ↓").style(text::primary)
                 ]
                 .spacing(10)
-                .align_items(Alignment::Center),
+                .align_x(Center),
             )
             .into()
         } else {
             scrollable(
                 column(self.history.iter().map(message_bubble))
                     .spacing(10)
-                    .padding(Padding {
-                        right: 20.0,
-                        ..Padding::ZERO
-                    }),
+                    .padding(padding::right(20)),
             )
-            .align_y(scrollable::Alignment::End)
-            .height(Length::Fill)
+            .anchor_y(scrollable::Anchor::End)
+            .height(Fill)
             .into()
         };
 
@@ -133,47 +130,41 @@ impl Conversation {
         column![title, messages, input]
             .spacing(10)
             .padding(10)
-            .align_items(Alignment::Center)
+            .align_x(Center)
             .into()
     }
 }
 
 fn message_bubble<'a>(message: &'a assistant::Message) -> Element<'a, Message> {
+    use iced::border;
+
     let bubble = container(
         container(text(message.content()))
-            .width(Length::Fill)
+            .width(Fill)
             .style(move |theme: &Theme| {
                 let palette = theme.extended_palette();
 
-                let (background, border) = match message {
-                    assistant::Message::Assistant(_) => (
-                        palette.background.weak,
-                        Border::rounded([0.0, 10.0, 10.0, 10.0]),
-                    ),
-                    assistant::Message::User(_) => (
-                        palette.success.weak,
-                        Border::rounded([10.0, 0.0, 10.0, 10.0]),
-                    ),
+                let (background, radius) = match message {
+                    assistant::Message::Assistant(_) => {
+                        (palette.background.weak, border::radius(10).top_left(0))
+                    }
+                    assistant::Message::User(_) => {
+                        (palette.success.weak, border::radius(10.0).top_left(0))
+                    }
                 };
 
                 container::Style {
                     background: Some(background.color.into()),
                     text_color: Some(background.text),
-                    border,
+                    border: border::rounded(radius),
                     ..container::Style::default()
                 }
             })
             .padding(10),
     )
     .padding(match message {
-        assistant::Message::Assistant(_) => Padding {
-            right: 20.0,
-            ..Padding::ZERO
-        },
-        assistant::Message::User(_) => Padding {
-            left: 20.0,
-            ..Padding::ZERO
-        },
+        assistant::Message::Assistant(_) => padding::right(20),
+        assistant::Message::User(_) => padding::left(20),
     });
 
     let copy = tooltip(
@@ -193,11 +184,11 @@ fn message_bubble<'a>(message: &'a assistant::Message) -> Element<'a, Message> {
     hover(
         bubble,
         container(copy)
-            .width(Length::Fill)
-            .center_y(Length::Fill)
+            .width(Fill)
+            .center_y(Fill)
             .align_x(match message {
-                assistant::Message::Assistant(_) => alignment::Horizontal::Right,
-                assistant::Message::User(_) => alignment::Horizontal::Left,
+                assistant::Message::Assistant(_) => Right,
+                assistant::Message::User(_) => Left,
             }),
     )
     .into()

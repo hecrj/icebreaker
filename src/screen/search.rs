@@ -1,14 +1,14 @@
 use crate::assistant::{Error, Model};
 use crate::icon;
 
-use iced::alignment::{self, Alignment};
+use iced::padding;
 use iced::theme::{self, Theme};
 use iced::time::Duration;
 use iced::widget::{
     self, button, center, column, container, horizontal_space, hover, iced, row, scrollable, text,
     text_input, value,
 };
-use iced::{Color, Element, Font, Length, Padding, Task};
+use iced::{Center, Color, Element, Fill, Font, Right, Task};
 
 pub struct Search {
     models: Vec<Model>,
@@ -152,9 +152,9 @@ impl Search {
                             row(chunk.into_iter().map(model_card)).spacing(10).into()
                         }))
                         .spacing(10)
-                        .padding(Padding::right(10));
+                        .padding(padding::right(10));
 
-                    scrollable(cards).height(Length::Fill).embed_y(true).into()
+                    scrollable(cards).height(Fill).embed_y(true).into()
                 }
             };
 
@@ -190,7 +190,7 @@ impl Search {
                 llama_cpp,
             ]
             .spacing(7)
-            .align_items(Alignment::Center)
+            .align_y(Center)
         };
 
         container(column![search, models, footer].spacing(10))
@@ -222,7 +222,7 @@ fn model_card(model: &Model) -> Element<Message> {
                     }
                 })
         ]
-        .align_items(Alignment::Center)
+        .align_y(Center)
         .spacing(5)
         .into()
     }
@@ -262,13 +262,13 @@ fn model_card(model: &Model) -> Element<Message> {
     let chat = container(
         button(row![icon::chat(), "Run"].spacing(10)).on_press(Message::RunModel(model.clone())),
     )
-    .width(Length::Fill)
+    .width(Fill)
     .padding(10)
-    .align_x(alignment::Horizontal::Right)
-    .center_y(Length::Fill);
+    .align_x(Right)
+    .center_y(Fill);
 
     let card = container(column![title, metadata].spacing(10))
-        .width(Length::Fill)
+        .width(Fill)
         .padding(10)
         .style(container::rounded_box);
 
