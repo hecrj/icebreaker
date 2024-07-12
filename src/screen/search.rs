@@ -28,6 +28,7 @@ pub enum Message {
 
 #[derive(Debug, Clone)]
 pub enum Link {
+    Rust,
     Iced,
     HuggingFace,
     LlamaCpp,
@@ -100,6 +101,7 @@ impl Search {
             Message::RunModel(model) => (Task::none(), Event::ModelSelected(model)),
             Message::LinkPressed(link) => {
                 let _ = open::that(match link {
+                    Link::Rust => "https://rust-lang.org",
                     Link::Iced => "https://iced.rs",
                     Link::HuggingFace => "https://huggingface.co",
                     Link::LlamaCpp => "https://github.com/ggerganov/llama.cpp",
@@ -166,6 +168,11 @@ impl Search {
                     .style(button::text)
             };
 
+            let rust = link(
+                button(text("🦀 Rust").shaping(text::Shaping::Advanced)),
+                Link::Rust,
+            );
+
             let iced = link(button(iced(12)), Link::Iced);
 
             let hugging_face = link(
@@ -180,6 +187,8 @@ impl Search {
 
             row![
                 text("Made with"),
+                rust,
+                text("and"),
                 iced,
                 horizontal_space(),
                 text("Powered by"),
