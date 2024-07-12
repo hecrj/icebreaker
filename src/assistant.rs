@@ -350,6 +350,7 @@ impl Assistant {
                         "model": "tgi",
                         "messages": messages,
                         "stream": true,
+                        "cache_prompt": true,
                     }))
             };
 
