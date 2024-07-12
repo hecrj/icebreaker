@@ -149,7 +149,7 @@ fn message_bubble<'a>(message: &'a assistant::Message) -> Element<'a, Message> {
                         (palette.background.weak, border::radius(10).top_left(0))
                     }
                     assistant::Message::User(_) => {
-                        (palette.success.weak, border::radius(10.0).top_left(0))
+                        (palette.success.weak, border::radius(10.0).top_right(0))
                     }
                 };
 
