@@ -12,7 +12,7 @@ use iced::{Element, Subscription, Task, Theme};
 
 pub fn main() -> iced::Result {
     iced::application(Chat::title, Chat::update, Chat::view)
-        .font(include_bytes!("../fonts/chat-icons.ttf"))
+        .font(icon::FONT_BYTES)
         .subscription(Chat::subscription)
         .theme(Chat::theme)
         .run_with(Chat::new)

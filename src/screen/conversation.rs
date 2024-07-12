@@ -1,7 +1,12 @@
 use crate::assistant::{self, Assistant, ChatError, ChatEvent};
+use crate::icon;
 
-use iced::widget::{self, center, column, container, scrollable, text, text_input};
-use iced::{Alignment, Border, Element, Font, Length, Padding, Task, Theme};
+use iced::alignment::{self, Alignment};
+use iced::clipboard;
+use iced::widget::{
+    self, button, center, column, container, hover, scrollable, text, text_input, tooltip,
+};
+use iced::{Border, Element, Font, Length, Padding, Task, Theme};
 
 pub struct Conversation {
     assistant: Assistant,
@@ -16,6 +21,7 @@ pub enum Message {
     InputChanged(String),
     InputSubmitted,
     Chatting(Result<ChatEvent, ChatError>),
+    Copy(assistant::Message),
 }
 
 impl Conversation {
@@ -79,6 +85,7 @@ impl Conversation {
 
                 Task::none()
             }
+            Message::Copy(message) => clipboard::write(message.content().to_owned()),
         }
     }
 
@@ -132,7 +139,7 @@ impl Conversation {
 }
 
 fn message_bubble<'a>(message: &'a assistant::Message) -> Element<'a, Message> {
-    container(
+    let bubble = container(
         container(text(message.content()))
             .width(Length::Fill)
             .style(move |theme: &Theme| {
@@ -167,6 +174,31 @@ fn message_bubble<'a>(message: &'a assistant::Message) -> Element<'a, Message> {
             left: 20.0,
             ..Padding::ZERO
         },
-    })
+    });
+
+    let copy = tooltip(
+        button(icon::clipboard())
+            .on_press_with(|| Message::Copy(message.clone()))
+            .padding(0)
+            .style(button::text),
+        container(text("Copy to clipboard").size(12))
+            .padding(5)
+            .style(|theme: &Theme| container::Style {
+                background: Some(theme.extended_palette().secondary.weak.color.into()),
+                ..container::rounded_box(theme)
+            }),
+        tooltip::Position::Bottom,
+    );
+
+    hover(
+        bubble,
+        container(copy)
+            .width(Length::Fill)
+            .center_y(Length::Fill)
+            .align_x(match message {
+                assistant::Message::Assistant(_) => alignment::Horizontal::Right,
+                assistant::Message::User(_) => alignment::Horizontal::Left,
+            }),
+    )
     .into()
 }
