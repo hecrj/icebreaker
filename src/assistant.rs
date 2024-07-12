@@ -442,7 +442,7 @@ impl Assistant {
         let server = process::Command::new(executable)
             .args(Self::parse_args(&format!(
                 "--model models/{filename} --conversation \
-                    --port 80 --host 0.0.0.0 {gpu_flags}",
+                    --port 8080 --host 0.0.0.0 {gpu_flags}",
                 filename = file.name,
             )))
             .kill_on_drop(true)
