@@ -76,27 +76,26 @@ impl Chat {
             }
             Message::Boot(message) => {
                 if let Screen::Boot(search) = &mut self.screen {
-                    let (task, event) = search.update(message);
+                    let action = search.update(message);
 
-                    let event_task = match event {
-                        boot::Event::None => Task::none(),
-                        boot::Event::Finished(assistant) => {
+                    match action {
+                        boot::Action::None => Task::none(),
+                        boot::Action::Run(task) => task.map(Message::Boot),
+                        boot::Action::Finish(assistant) => {
                             let (conversation, task) = screen::Conversation::new(assistant);
 
                             self.screen = Screen::Conversation(conversation);
 
                             task.map(Message::Conversation)
                         }
-                        boot::Event::Aborted => {
+                        boot::Action::Abort => {
                             let (search, task) = screen::Search::new();
 
                             self.screen = Screen::Search(search);
 
                             task.map(Message::Search)
                         }
-                    };
-
-                    Task::batch([task.map(Message::Boot), event_task])
+                    }
                 } else {
                     Task::none()
                 }

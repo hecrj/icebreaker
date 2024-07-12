@@ -23,7 +23,7 @@ enum State {
         stage: String,
         progress: u64,
         tick: usize,
-        task: task::Handle,
+        _task: task::Handle,
     },
 }
 
@@ -37,10 +37,11 @@ pub enum Message {
     UseCUDAToggled(bool),
 }
 
-pub enum Event {
+pub enum Action {
     None,
-    Finished(Assistant),
-    Aborted,
+    Run(Task<Message>),
+    Finish(Assistant),
+    Abort,
 }
 
 impl Boot {
@@ -66,7 +67,7 @@ impl Boot {
         }
     }
 
-    pub fn update(&mut self, message: Message) -> (Task<Message>, Event) {
+    pub fn update(&mut self, message: Message) -> Action {
         match message {
             Message::Boot(file) => {
                 let (task, handle) = Task::run(
@@ -88,10 +89,10 @@ impl Boot {
                     stage: "Loading...".to_owned(),
                     progress: 0,
                     tick: 0,
-                    task: handle,
+                    _task: handle.abort_on_drop(),
                 };
 
-                (task, Event::None)
+                Action::Run(task)
             }
             Message::Booting(Ok(event)) => match event {
                 BootEvent::Progressed {
@@ -106,45 +107,41 @@ impl Boot {
                         *progress = percent;
                     }
 
-                    (Task::none(), Event::None)
+                    Action::None
                 }
                 BootEvent::Logged(log) => {
                     if let State::Booting { logs, .. } = &mut self.state {
                         logs.push(log);
                     }
 
-                    (Task::none(), Event::None)
+                    Action::None
                 }
-                BootEvent::Finished(assistant) => (Task::none(), Event::Finished(assistant)),
+                BootEvent::Finished(assistant) => Action::Finish(assistant),
             },
             Message::Booting(Err(new_error)) => {
                 if let State::Booting { error, .. } = &mut self.state {
                     *error = Some(new_error);
                 }
 
-                (Task::none(), Event::None)
+                Action::None
             }
             Message::Tick(_now) => {
                 if let State::Booting { tick, .. } = &mut self.state {
                     *tick += 1;
                 }
 
-                (Task::none(), Event::None)
+                Action::None
             }
             Message::Cancel => {
-                if let State::Booting { task, .. } = &self.state {
-                    task.abort();
-                }
-
                 self.state = State::Idle;
 
-                (Task::none(), Event::None)
+                Action::None
             }
-            Message::Abort => (Task::none(), Event::Aborted),
+            Message::Abort => Action::Abort,
             Message::UseCUDAToggled(use_cuda) => {
                 self.use_cuda = use_cuda;
 
-                (Task::none(), Event::None)
+                Action::None
             }
         }
     }
