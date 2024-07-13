@@ -37,9 +37,10 @@ pub enum Link {
     LlamaCpp,
 }
 
-pub enum Event {
+pub enum Action {
     None,
-    ModelSelected(Model),
+    Run(Task<Message>),
+    Boot(Model),
 }
 
 impl Search {
@@ -67,29 +68,27 @@ impl Search {
         "Icebreaker".to_owned()
     }
 
-    pub fn update(&mut self, message: Message) -> (Task<Message>, Event) {
+    pub fn update(&mut self, message: Message) -> Action {
         match message {
             Message::ModelsListed(Ok(models)) => {
                 self.models = models;
                 self.is_searching = false;
 
-                (Task::none(), Event::None)
+                Action::None
             }
             Message::ModelsListed(Err(error)) => {
                 self.error = Some(dbg!(error));
 
-                (Task::none(), Event::None)
+                Action::None
             }
             Message::SearchChanged(search) => {
                 self.search = search;
                 self.search_temperature += 1;
 
-                (
-                    Task::perform(tokio::time::sleep(Duration::from_secs(1)), |_| {
-                        Message::SearchCooled
-                    }),
-                    Event::None,
-                )
+                Action::Run(Task::perform(
+                    tokio::time::sleep(Duration::from_secs(1)),
+                    |_| Message::SearchCooled,
+                ))
             }
             Message::SearchCooled => {
                 self.search_temperature = self.search_temperature.saturating_sub(1);
@@ -97,15 +96,15 @@ impl Search {
                 if self.search_temperature == 0 {
                     self.is_searching = true;
 
-                    (
-                        Task::perform(Model::search(self.search.clone()), Message::ModelsListed),
-                        Event::None,
-                    )
+                    Action::Run(Task::perform(
+                        Model::search(self.search.clone()),
+                        Message::ModelsListed,
+                    ))
                 } else {
-                    (Task::none(), Event::None)
+                    Action::None
                 }
             }
-            Message::RunModel(model) => (Task::none(), Event::ModelSelected(model)),
+            Message::RunModel(model) => Action::Boot(model),
             Message::LinkPressed(link) => {
                 let _ = open::that(match link {
                     Link::Rust => "https://rust-lang.org",
@@ -114,12 +113,12 @@ impl Search {
                     Link::LlamaCpp => "https://github.com/ggerganov/llama.cpp",
                 });
 
-                (Task::none(), Event::None)
+                Action::None
             }
             Message::WindowResized(size) => {
                 self.window_size = size;
 
-                (Task::none(), Event::None)
+                Action::None
             }
         }
     }

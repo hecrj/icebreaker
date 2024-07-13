@@ -60,17 +60,18 @@ impl Chat {
         match message {
             Message::Search(message) => {
                 if let Screen::Search(search) = &mut self.screen {
-                    let (task, event) = search.update(message);
+                    let action = search.update(message);
 
-                    match event {
-                        search::Event::None => {}
-                        search::Event::ModelSelected(model) => {
+                    match action {
+                        search::Action::None => Task::none(),
+                        search::Action::Run(task) => task.map(Message::Search),
+                        search::Action::Boot(model) => {
                             self.screen =
                                 Screen::Boot(screen::Boot::new(model, self.system.as_ref()));
-                        }
-                    };
 
-                    task.map(Message::Search)
+                            Task::none()
+                        }
+                    }
                 } else {
                     Task::none()
                 }
