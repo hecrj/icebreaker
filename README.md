@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/crates/l/icebreaker.svg)](https://github.com/hecrj/icebreaker/blob/master/LICENSE)
 [![Downloads](https://img.shields.io/crates/d/icebreaker.svg)](https://crates.io/crates/icebreaker)
 [![Test Status](https://img.shields.io/github/actions/workflow/status/hecrj/icebreaker/test.yml?branch=master&event=push&label=test)](https://github.com/hecrj/icebreaker/actions)
-<a href="https://github.com/iced-rs/iced.git">
+<a href="https://github.com/iced-rs/iced">
   <img alt="Made with iced" src="assets/made_with_iced.svg" height="20">
 </a>
 
