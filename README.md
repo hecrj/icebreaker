@@ -12,3 +12,16 @@ A local AI chat app powered by 🦀 Rust, 🧊 iced, 🤗 Hugging Face, and 🦙
 <img alt="Icebreaker" src="assets/showcase.gif" width="70%">
 
 </div>
+
+## Installation
+
+No pre-built binaries yet! Use `cargo` to try it out:
+
+```bash
+cargo install --git https://github.com/hecrj/icebreaker.git
+```
+
+You also need either [`llama.cpp`] or [Docker] installed, for now.
+
+[`llama.cpp`]: https://github.com/ggerganov/llama.cpp
+[Docker]: https://www.docker.com/
