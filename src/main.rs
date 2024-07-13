@@ -135,8 +135,9 @@ impl Chat {
         use iced::keyboard;
 
         let screen = match &self.screen {
+            Screen::Search(search) => search.subscription().map(Message::Search),
             Screen::Boot(boot) => boot.subscription().map(Message::Boot),
-            Screen::Search(_) | Screen::Conversation(_) => Subscription::none(),
+            Screen::Conversation(_) => Subscription::none(),
         };
 
         let hotkeys = keyboard::on_key_press(|key, _modifiers| match key {

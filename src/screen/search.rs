@@ -7,7 +7,8 @@ use iced::widget::{
     self, button, center, column, container, horizontal_space, hover, iced, row, scrollable, text,
     text_input, value,
 };
-use iced::{Center, Color, Element, Fill, Font, Right, Task};
+use iced::window;
+use iced::{Center, Color, Element, Fill, Font, Right, Size, Subscription, Task};
 
 pub struct Search {
     models: Vec<Model>,
@@ -15,6 +16,7 @@ pub struct Search {
     search_temperature: usize,
     is_searching: bool,
     error: Option<Error>,
+    window_size: Size,
 }
 
 #[derive(Debug, Clone)]
@@ -24,6 +26,7 @@ pub enum Message {
     SearchCooled,
     RunModel(Model),
     LinkPressed(Link),
+    WindowResized(Size),
 }
 
 #[derive(Debug, Clone)]
@@ -48,10 +51,14 @@ impl Search {
                 search_temperature: 0,
                 is_searching: true,
                 error: None,
+                window_size: Size::ZERO,
             },
             Task::batch([
                 Task::perform(Model::list(), Message::ModelsListed),
                 widget::focus_next(),
+                window::get_latest()
+                    .and_then(window::get_size)
+                    .map(Message::WindowResized),
             ]),
         )
     }
@@ -109,6 +116,11 @@ impl Search {
 
                 (Task::none(), Event::None)
             }
+            Message::WindowResized(size) => {
+                self.window_size = size;
+
+                (Task::none(), Event::None)
+            }
         }
     }
 
@@ -148,8 +160,12 @@ impl Search {
                     }))
                     .into()
                 } else {
+                    const MIN_CARD_WIDTH: f32 = 450.0;
+
+                    let n_columns = (self.window_size.width / MIN_CARD_WIDTH).max(1.0) as usize;
+
                     let cards =
-                        column(filtered_models.chunks(2).into_iter().map(|chunk| {
+                        column(filtered_models.chunks(n_columns).into_iter().map(|chunk| {
                             row(chunk.into_iter().map(model_card)).spacing(10).into()
                         }))
                         .spacing(10);
@@ -203,6 +219,10 @@ impl Search {
         container(column![search, models, footer].spacing(10))
             .padding(10)
             .into()
+    }
+
+    pub fn subscription(&self) -> Subscription<Message> {
+        window::resize_events().map(|(_id, size)| Message::WindowResized(size))
     }
 }
 
