@@ -1,14 +1,13 @@
 use crate::assistant::{Error, Model};
 use crate::icon;
 
-use iced::theme::{self, Theme};
 use iced::time::Duration;
 use iced::widget::{
     self, button, center, column, container, horizontal_space, hover, iced, row, scrollable, text,
     text_input, value,
 };
 use iced::window;
-use iced::{Center, Color, Element, Fill, Font, Right, Size, Subscription, Task};
+use iced::{Center, Element, Fill, Font, Right, Size, Subscription, Task, Theme};
 
 pub struct Search {
     models: Vec<Model>,
@@ -131,8 +130,6 @@ impl Search {
 
         let models: Element<_> =
             {
-                use itertools::Itertools;
-
                 let search_terms: Vec<_> = self
                     .search
                     .trim()
@@ -159,6 +156,7 @@ impl Search {
                     }))
                     .into()
                 } else {
+                    use itertools::Itertools;
                     const MIN_CARD_WIDTH: f32 = 450.0;
 
                     let n_columns = (self.window_size.width / MIN_CARD_WIDTH).max(1.0) as usize;
@@ -228,25 +226,14 @@ impl Search {
 fn model_card(model: &Model) -> Element<Message> {
     use iced::widget::Text;
 
-    fn label<'a>(
+    fn stat<'a>(
         icon: Text<'a>,
         value: Text<'a>,
-        color: fn(theme::Palette) -> Color,
+        style: fn(&Theme) -> text::Style,
     ) -> Element<'a, Message> {
         row![
-            icon.size(10).style(move |theme: &Theme| {
-                text::Style {
-                    color: Some(color(theme.palette())),
-                }
-            }),
-            value
-                .size(12)
-                .font(Font::MONOSPACE)
-                .style(move |theme: &Theme| {
-                    text::Style {
-                        color: Some(color(theme.palette())),
-                    }
-                })
+            icon.size(10).style(style),
+            value.size(12).font(Font::MONOSPACE).style(style)
         ]
         .align_y(Center)
         .spacing(5)
@@ -269,18 +256,16 @@ fn model_card(model: &Model) -> Element<Message> {
     let separator = || text("•").size(12);
 
     let metadata = row![
-        label(icon::user(), text(model.author()), |palette| palette.text),
+        stat(icon::user(), text(model.author()), text::default),
         separator(),
-        label(icon::download(), value(model.downloads), |palette| {
-            palette.primary
-        }),
+        stat(icon::download(), value(model.downloads), text::primary),
         separator(),
-        label(icon::heart(), value(model.likes), |palette| palette.danger),
+        stat(icon::heart(), value(model.likes), text::danger),
         separator(),
-        label(
+        stat(
             icon::clock(),
             value(model.last_modified.format("%-e %B, %y")),
-            |palette| palette.text,
+            text::default,
         ),
     ]
     .spacing(10);
