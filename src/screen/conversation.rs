@@ -160,7 +160,7 @@ impl Conversation {
     }
 }
 
-fn message_bubble<'a>(message: &'a assistant::Message) -> Element<'a, Message> {
+fn message_bubble(message: &assistant::Message) -> Element<Message> {
     use iced::border;
 
     let bubble = container(
@@ -216,5 +216,4 @@ fn message_bubble<'a>(message: &'a assistant::Message) -> Element<'a, Message> {
                 assistant::Message::User(_) => Left,
             }),
     )
-    .into()
 }

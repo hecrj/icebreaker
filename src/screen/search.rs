@@ -283,5 +283,5 @@ fn model_card(model: &Model) -> Element<Message> {
         .padding(10)
         .style(container::rounded_box);
 
-    hover(card, chat).into()
+    hover(card, chat)
 }

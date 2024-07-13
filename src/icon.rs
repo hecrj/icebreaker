@@ -1,7 +1,7 @@
 use iced::widget::{text, Text};
 use iced::Font;
 
-pub const FONT_BYTES: &'static [u8] = include_bytes!("../fonts/icebreaker-icons.ttf");
+pub const FONT_BYTES: &[u8] = include_bytes!("../fonts/icebreaker-icons.ttf");
 
 pub fn download<'a>() -> Text<'a> {
     with_codepoint('\u{E800}')

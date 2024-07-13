@@ -18,8 +18,8 @@ pub struct Assistant {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Backend {
-    CPU,
-    CUDA,
+    Cpu,
+    Cuda,
 }
 
 impl Assistant {
@@ -50,7 +50,8 @@ impl Assistant {
 
         iced::stream::try_channel(1, move |sender| async move {
             let mut sender = Sender(sender);
-            let _ = fs::create_dir_all(Self::MODELS_DIR).await?;
+
+            fs::create_dir_all(Self::MODELS_DIR).await?;
 
             let model_path = format!(
                 "{directory}/{filename}",
@@ -161,7 +162,7 @@ impl Assistant {
                         }
                     }
 
-                    model.write(&chunk).await?;
+                    model.write_all(&chunk).await?;
                 }
 
                 model.flush().await?;
@@ -212,7 +213,7 @@ impl Assistant {
                 sender.progress("Preparing container...", 0).await;
 
                 let command = match backend {
-                    Backend::CPU => {
+                    Backend::Cpu => {
                         format!(
                             "create --rm -p {port}:80 -v {volume}:/models \
                             {container} --model models/{filename} --conversation \
@@ -223,7 +224,7 @@ impl Assistant {
                             volume = Self::MODELS_DIR,
                         )
                     }
-                    Backend::CUDA => {
+                    Backend::Cuda => {
                         format!(
                             "create --rm --gpus all -p {port}:80 -v {volume}:/models \
                             {container} --model models/{filename} --conversation \
@@ -257,7 +258,7 @@ impl Assistant {
                     }
                 };
 
-                let _ = tokio::task::spawn(notify_progress);
+                let _handle = tokio::task::spawn(notify_progress);
 
                 let container = {
                     let output = io::BufReader::new(docker.stdout.take().expect("piped stdout"));
@@ -279,12 +280,12 @@ impl Assistant {
                 let server = Server::Container(container.clone());
 
                 let _start = process::Command::new("docker")
-                    .args(&["start", &container])
+                    .args(["start", &container])
                     .output()
                     .await?;
 
                 let mut logs = process::Command::new("docker")
-                    .args(&["logs", "-f", &container])
+                    .args(["logs", "-f", &container])
                     .stdout(std::process::Stdio::piped())
                     .stderr(std::process::Stdio::piped())
                     .spawn()?;
@@ -447,8 +448,8 @@ impl Assistant {
         backend: Backend,
     ) -> Result<process::Child, Error> {
         let gpu_flags = match backend {
-            Backend::CPU => "",
-            Backend::CUDA => "--gpu-layers 40",
+            Backend::Cpu => "",
+            Backend::Cuda => "--gpu-layers 40",
         };
 
         let server = process::Command::new(executable)
@@ -529,7 +530,7 @@ impl Drop for Server {
         match self {
             Self::Container(id) => {
                 let _ = process::Command::new("docker")
-                    .args(&["stop", id])
+                    .args(["stop", id])
                     .stdin(process::Stdio::null())
                     .stdout(process::Stdio::null())
                     .stderr(process::Stdio::null())
@@ -664,10 +665,10 @@ impl fmt::Display for Downloads {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
             1_000_000.. => {
-                write!(f, "{:.2}M", (self.0 as f32 / 1_000_000 as f32))
+                write!(f, "{:.2}M", (self.0 as f32 / 1_000_000_f32))
             }
             1_000.. => {
-                write!(f, "{:.2}k", (self.0 as f32 / 1_000 as f32))
+                write!(f, "{:.2}k", (self.0 as f32 / 1_000_f32))
             }
             _ => {
                 write!(f, "{}", self.0)

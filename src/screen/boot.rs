@@ -76,9 +76,9 @@ impl Boot {
                     Assistant::boot(
                         file,
                         if self.use_cuda {
-                            Backend::CUDA
+                            Backend::Cuda
                         } else {
-                            Backend::CPU
+                            Backend::Cpu
                         },
                     ),
                     Message::Booting,
@@ -105,7 +105,7 @@ impl Boot {
                         stage, progress, ..
                     } = &mut self.state
                     {
-                        *stage = new_stage.to_owned();
+                        new_stage.clone_into(stage);
                         *progress = percent;
                     }
 
