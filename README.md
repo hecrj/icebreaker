@@ -26,3 +26,8 @@ You also need either [`llama.cpp`] or [Docker] installed, for now.
 
 [`llama.cpp`]: https://github.com/ggerganov/llama.cpp
 [Docker]: https://www.docker.com/
+
+
+## Why "Icebreaker"?
+
+[Blame Mistral!](assets/naming.png)
