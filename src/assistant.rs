@@ -186,6 +186,8 @@ impl Assistant {
                     sender.log(line).await;
                 }
 
+                sender.progress("Launching assistant...", 99).await;
+
                 sender
                     .log(format!(
                         "Launching {model} with local llama-server...",
