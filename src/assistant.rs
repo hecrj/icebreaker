@@ -340,12 +340,12 @@ impl Assistant {
             let client = reqwest::Client::new();
 
             let request = {
-                let messages: Vec<_> = history
-                    .iter()
-                    .map(|message| match message {
+                let messages: Vec<_> = [("system", "You are a helpful assistant.")]
+                    .into_iter()
+                    .chain(history.iter().map(|message| match message {
                         Message::Assistant(content) => ("assistant", content.as_str()),
                         Message::User(content) => ("user", content.as_str()),
-                    })
+                    }))
                     .chain([("user", message.as_str())])
                     .map(|(role, content)| {
                         json!({
