@@ -1,4 +1,6 @@
-use crate::assistant::{self, Assistant, Backend, BootEvent, ChatEvent, Error, File};
+use crate::data::assistant::{self, Assistant, Backend, BootEvent, File};
+use crate::data::chat;
+use crate::data::Error;
 use crate::icon;
 
 use iced::clipboard;
@@ -13,6 +15,7 @@ use iced::{Center, Element, Fill, Font, Left, Right, Subscription, Theme};
 
 pub struct Conversation {
     state: State,
+    title: Option<String>,
     history: Vec<assistant::Message>,
     input: String,
     error: Option<Error>,
@@ -39,7 +42,7 @@ pub enum Message {
     Tick(Instant),
     InputChanged(String),
     InputSubmitted,
-    Chatting(Result<ChatEvent, Error>),
+    Chatting(Result<chat::Event, Error>),
     Copy(assistant::Message),
     Back,
 }
@@ -65,6 +68,7 @@ impl Conversation {
                     tick: 0,
                     _task: handle.abort_on_drop(),
                 },
+                title: None,
                 history: Vec::new(),
                 input: String::new(),
                 error: None,
@@ -137,7 +141,7 @@ impl Conversation {
                     *is_sending = true;
 
                     Action::Run(Task::run(
-                        assistant.chat(&self.history, &self.input),
+                        chat::send(assistant, &self.history, &self.input),
                         Message::Chatting,
                     ))
                 } else {
@@ -146,19 +150,22 @@ impl Conversation {
             }
             Message::Chatting(Ok(event)) => {
                 match event {
-                    ChatEvent::MessageSent(message) => {
+                    chat::Event::TitleChanged(title) => {
+                        self.title = Some(title);
+                    }
+                    chat::Event::MessageSent(message) => {
                         self.history.push(message);
                         self.input = String::new();
                     }
-                    ChatEvent::MessageAdded(message) => {
+                    chat::Event::MessageAdded(message) => {
                         self.history.push(message);
                     }
-                    ChatEvent::LastMessageChanged(new_message) => {
+                    chat::Event::LastMessageChanged(new_message) => {
                         if let Some(message) = self.history.last_mut() {
                             *message = new_message;
                         }
                     }
-                    ChatEvent::ExchangeOver => {
+                    chat::Event::ExchangeOver => {
                         if let State::Running { is_sending, .. } = &mut self.state {
                             *is_sending = false;
                         }
@@ -183,11 +190,25 @@ impl Conversation {
 
     pub fn view(&self) -> Element<Message> {
         let header: Element<_> = {
-            let title = text(self.model_name())
-                .font(Font::MONOSPACE)
-                .size(20)
+            let title: Element<_> = match &self.title {
+                Some(title) => column![
+                    text(title).font(Font::MONOSPACE).size(20),
+                    text(self.model_name())
+                        .font(Font::MONOSPACE)
+                        .size(14)
+                        .style(text::secondary)
+                ]
+                .spacing(5)
+                .align_x(Center)
                 .width(Fill)
-                .align_x(Center);
+                .into(),
+                None => text(self.model_name())
+                    .font(Font::MONOSPACE)
+                    .size(20)
+                    .width(Fill)
+                    .align_x(Center)
+                    .into(),
+            };
 
             let back = tooltip(
                 button(text("←").size(20))

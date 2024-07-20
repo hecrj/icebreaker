@@ -1,4 +1,4 @@
-use crate::assistant::{Backend, File, Model};
+use crate::data::assistant::{Backend, File, Model};
 
 use iced::border;
 use iced::system;

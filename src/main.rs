@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod assistant;
+mod data;
 mod icon;
 mod screen;
 

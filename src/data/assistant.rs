@@ -1,3 +1,5 @@
+use crate::data::Error;
+
 use futures::channel::mpsc;
 use futures::{SinkExt, Stream, StreamExt};
 use serde::Deserialize;
@@ -329,26 +331,21 @@ impl Assistant {
         })
     }
 
-    pub fn chat(
-        &self,
-        history: &[Message],
-        message: &str,
-    ) -> impl Stream<Item = Result<ChatEvent, Error>> {
-        let model = self.model.clone();
-        let history = history.to_vec();
-        let message = message.to_owned();
-
-        iced::stream::try_channel(1, |mut sender| async move {
+    pub fn complete<'a>(
+        &'a self,
+        system_prompt: &'a str,
+        messages: &'a [Message],
+    ) -> impl Stream<Item = Result<String, Error>> + 'a {
+        iced::stream::try_channel(1, move |mut sender| async move {
             let client = reqwest::Client::new();
 
             let request = {
-                let messages: Vec<_> = [("system", "You are a helpful assistant.")]
+                let messages: Vec<_> = [("system", system_prompt)]
                     .into_iter()
-                    .chain(history.iter().map(|message| match message {
+                    .chain(messages.iter().map(|message| match message {
                         Message::Assistant(content) => ("assistant", content.as_str()),
                         Message::User(content) => ("user", content.as_str()),
                     }))
-                    .chain([("user", message.as_str())])
                     .map(|(role, content)| {
                         json!({
                             "role": role,
@@ -363,7 +360,7 @@ impl Assistant {
                         port = Self::HOST_PORT
                     ))
                     .json(&json!({
-                        "model": format!("{model}", model = model.name()),
+                        "model": format!("{model}", model = self.name()),
                         "messages": messages,
                         "stream": true,
                         "cache_prompt": true,
@@ -371,16 +368,6 @@ impl Assistant {
             };
 
             let mut response = request.send().await?.error_for_status()?;
-
-            let _ = sender
-                .send(ChatEvent::MessageSent(Message::User(message)))
-                .await;
-
-            let _ = sender
-                .send(ChatEvent::MessageAdded(Message::Assistant(String::new())))
-                .await;
-
-            let mut message = String::new();
             let mut buffer = Vec::new();
 
             while let Some(chunk) = response.chunk().await? {
@@ -419,22 +406,14 @@ impl Assistant {
 
                         if let Some(choice) = data.choices.first() {
                             if let Some(content) = &choice.delta.content {
-                                message.push_str(content);
+                                let _ = sender.send(content.clone()).await;
                             }
                         }
-
-                        let _ = sender
-                            .send(ChatEvent::LastMessageChanged(Message::Assistant(
-                                message.trim().to_owned(),
-                            )))
-                            .await;
                     };
                 }
 
                 buffer = last_line.to_vec();
             }
-
-            let _ = sender.send(ChatEvent::ExchangeOver).await;
 
             Ok(())
         })
@@ -488,14 +467,6 @@ impl Message {
             Message::Assistant(content) | Message::User(content) => content,
         }
     }
-}
-
-#[derive(Debug, Clone)]
-pub enum ChatEvent {
-    MessageSent(Message),
-    MessageAdded(Message),
-    LastMessageChanged(Message),
-    ExchangeOver,
 }
 
 #[derive(Debug)]
@@ -671,38 +642,4 @@ impl fmt::Display for Likes {
 pub struct File {
     pub model: Id,
     pub name: String,
-}
-
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum Error {
-    #[error("request failed: {0}")]
-    RequestFailed(Arc<reqwest::Error>),
-    #[error("io operation failed: {0}")]
-    IOFailed(Arc<io::Error>),
-    #[error("docker operation failed: {0}")]
-    DockerFailed(&'static str),
-    #[error("executor failed: {0}")]
-    ExecutorFailed(&'static str),
-    #[error("deserialization failed: {0}")]
-    DecodingFailed(Arc<serde_json::Error>),
-    #[error("no suitable executor was found: neither llama-server nor docker are installed")]
-    NoExecutorAvailable,
-}
-
-impl From<reqwest::Error> for Error {
-    fn from(error: reqwest::Error) -> Self {
-        Self::RequestFailed(Arc::new(error))
-    }
-}
-
-impl From<io::Error> for Error {
-    fn from(error: io::Error) -> Self {
-        Self::IOFailed(Arc::new(error))
-    }
-}
-
-impl From<serde_json::Error> for Error {
-    fn from(error: serde_json::Error) -> Self {
-        Self::DecodingFailed(Arc::new(error))
-    }
 }
