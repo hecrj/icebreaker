@@ -1,5 +1,5 @@
 use crate::data::assistant::{self, Assistant, Backend, BootEvent, File};
-use crate::data::chat;
+use crate::data::chat::{self, Chat, Id};
 use crate::data::Error;
 use crate::icon;
 
@@ -15,6 +15,7 @@ use iced::{Center, Element, Fill, Font, Left, Right, Subscription, Theme};
 
 pub struct Conversation {
     state: State,
+    id: Option<Id>,
     title: Option<String>,
     history: Vec<assistant::Message>,
     input: String,
@@ -45,6 +46,8 @@ pub enum Message {
     Chatting(Result<chat::Event, Error>),
     Copy(assistant::Message),
     Back,
+    Created(Result<Chat, Error>),
+    Saved(Result<Chat, Error>),
 }
 
 pub enum Action {
@@ -68,12 +71,27 @@ impl Conversation {
                     tick: 0,
                     _task: handle.abort_on_drop(),
                 },
+                id: None,
                 title: None,
                 history: Vec::new(),
                 input: String::new(),
                 error: None,
             },
             Task::batch([boot, widget::focus_next()]),
+        )
+    }
+
+    pub fn open(chat: Chat, backend: Backend) -> (Self, Task<Message>) {
+        let (conversation, task) = Self::new(chat.file, backend);
+
+        (
+            Self {
+                id: Some(chat.id),
+                title: chat.title,
+                history: chat.history,
+                ..conversation
+            },
+            task,
         )
     }
 
@@ -148,32 +166,64 @@ impl Conversation {
                     Action::None
                 }
             }
-            Message::Chatting(Ok(event)) => {
-                match event {
-                    chat::Event::TitleChanged(title) => {
-                        self.title = Some(title);
+            Message::Chatting(Ok(event)) => match event {
+                chat::Event::TitleChanged(title) => {
+                    self.title = Some(title);
+
+                    Action::None
+                }
+                chat::Event::MessageSent(message) => {
+                    self.history.push(message);
+                    self.input = String::new();
+
+                    Action::None
+                }
+                chat::Event::MessageAdded(message) => {
+                    self.history.push(message);
+
+                    Action::None
+                }
+                chat::Event::LastMessageChanged(new_message) => {
+                    if let Some(message) = self.history.last_mut() {
+                        *message = new_message;
                     }
-                    chat::Event::MessageSent(message) => {
-                        self.history.push(message);
-                        self.input = String::new();
-                    }
-                    chat::Event::MessageAdded(message) => {
-                        self.history.push(message);
-                    }
-                    chat::Event::LastMessageChanged(new_message) => {
-                        if let Some(message) = self.history.last_mut() {
-                            *message = new_message;
+
+                    Action::None
+                }
+                chat::Event::ExchangeOver => {
+                    if let State::Running {
+                        is_sending,
+                        assistant,
+                        ..
+                    } = &mut self.state
+                    {
+                        *is_sending = false;
+
+                        if let Some(id) = &self.id {
+                            Action::Run(Task::perform(
+                                Chat::save(
+                                    id.clone(),
+                                    assistant.file().clone(),
+                                    self.title.clone(),
+                                    self.history.clone(),
+                                ),
+                                Message::Saved,
+                            ))
+                        } else {
+                            Action::Run(Task::perform(
+                                Chat::create(
+                                    assistant.file().clone(),
+                                    self.title.clone(),
+                                    self.history.clone(),
+                                ),
+                                Message::Created,
+                            ))
                         }
-                    }
-                    chat::Event::ExchangeOver => {
-                        if let State::Running { is_sending, .. } = &mut self.state {
-                            *is_sending = false;
-                        }
+                    } else {
+                        Action::None
                     }
                 }
-
-                Action::None
-            }
+            },
             Message::Chatting(Err(error)) => {
                 self.error = Some(dbg!(error));
 
@@ -185,6 +235,16 @@ impl Conversation {
             }
             Message::Copy(message) => Action::Run(clipboard::write(message.content().to_owned())),
             Message::Back => Action::Back,
+            Message::Created(Ok(chat)) | Message::Saved(Ok(chat)) => {
+                self.id = Some(chat.id);
+
+                Action::None
+            }
+            Message::Created(Err(error)) | Message::Saved(Err(error)) => {
+                self.error = Some(dbg!(error));
+
+                Action::None
+            }
         }
     }
 
@@ -251,7 +311,7 @@ impl Conversation {
 
                         let bar = progress_bar(0.0..=100.0, *progress as f32)
                             .width(200)
-                            .height(Fill);
+                            .height(30);
 
                         stack![
                             if self.error.is_none() {

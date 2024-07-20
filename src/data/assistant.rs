@@ -2,7 +2,7 @@ use crate::data::Error;
 
 use futures::channel::mpsc;
 use futures::{SinkExt, Stream, StreamExt};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::fs;
 use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt};
@@ -14,14 +14,8 @@ use std::time::Instant;
 
 #[derive(Debug, Clone)]
 pub struct Assistant {
-    model: Id,
+    file: File,
     _server: Arc<Server>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Backend {
-    Cpu,
-    Cuda,
 }
 
 impl Assistant {
@@ -316,7 +310,7 @@ impl Assistant {
                 if log.contains("HTTP server listening") {
                     sender
                         .finish(Assistant {
-                            model: file.model.clone(),
+                            file,
                             _server: Arc::new(server),
                         })
                         .await;
@@ -419,8 +413,12 @@ impl Assistant {
         })
     }
 
+    pub fn file(&self) -> &File {
+        &self.file
+    }
+
     pub fn name(&self) -> &str {
-        self.model.name()
+        self.file.model.name()
     }
 
     fn launch_with_executable(
@@ -455,7 +453,23 @@ impl Assistant {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Backend {
+    Cpu,
+    Cuda,
+}
+
+impl Backend {
+    pub fn detect(graphics_adapter: &str) -> Self {
+        if graphics_adapter.contains("NVIDIA") {
+            Self::Cuda
+        } else {
+            Self::Cpu
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Message {
     Assistant(String),
     User(String),
@@ -591,7 +605,7 @@ impl fmt::Display for Model {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Id(String);
 
 impl Id {
@@ -638,7 +652,7 @@ impl fmt::Display for Likes {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct File {
     pub model: Id,
     pub name: String,

@@ -25,13 +25,11 @@ pub enum Action {
 
 impl Boot {
     pub fn new(model: Model, system: Option<&system::Information>) -> Self {
-        let use_cuda = system
-            .map(|system| system.graphics_adapter.contains("NVIDIA"))
-            .unwrap_or_default();
-
         Self {
             model: model.clone(),
-            use_cuda,
+            use_cuda: system
+                .map(|system| Backend::detect(&system.graphics_adapter) == Backend::Cuda)
+                .unwrap_or_default(),
         }
     }
 

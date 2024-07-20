@@ -1,8 +1,11 @@
 pub mod assistant;
 pub mod chat;
 
+pub use chat::Chat;
+
 use std::io;
 use std::sync::Arc;
+use tokio::task;
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum Error {
@@ -16,6 +19,8 @@ pub enum Error {
     ExecutorFailed(&'static str),
     #[error("deserialization failed: {0}")]
     DecodingFailed(Arc<serde_json::Error>),
+    #[error("task join failed: {0}")]
+    JoinFailed(Arc<task::JoinError>),
     #[error("no suitable executor was found: neither llama-server nor docker are installed")]
     NoExecutorAvailable,
 }
@@ -35,5 +40,11 @@ impl From<io::Error> for Error {
 impl From<serde_json::Error> for Error {
     fn from(error: serde_json::Error) -> Self {
         Self::DecodingFailed(Arc::new(error))
+    }
+}
+
+impl From<task::JoinError> for Error {
+    fn from(error: task::JoinError) -> Self {
+        Self::JoinFailed(Arc::new(error))
     }
 }

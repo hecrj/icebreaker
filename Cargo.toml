@@ -25,8 +25,12 @@ serde.features = ["derive"]
 chrono.version = "0.4"
 chrono.features = ["serde"]
 
+uuid.version = "1.10"
+uuid.features = ["v4", "serde"]
+
+dirs-next = "2.0"
 futures = "0.3"
-thiserror = "1.0"
-serde_json = "1.0"
 itertools = "0.13"
 open = "5.2"
+serde_json = "1.0"
+thiserror = "1.0"

@@ -4,6 +4,8 @@ mod data;
 mod icon;
 mod screen;
 
+use crate::data::assistant;
+use crate::data::{Chat, Error};
 use crate::screen::boot;
 use crate::screen::conversation;
 use crate::screen::search;
@@ -13,45 +15,51 @@ use iced::system;
 use iced::{Element, Subscription, Task, Theme};
 
 pub fn main() -> iced::Result {
-    iced::application(Chat::title, Chat::update, Chat::view)
+    iced::application(Icebreaker::title, Icebreaker::update, Icebreaker::view)
         .font(icon::FONT_BYTES)
-        .subscription(Chat::subscription)
-        .theme(Chat::theme)
-        .run_with(Chat::new)
+        .subscription(Icebreaker::subscription)
+        .theme(Icebreaker::theme)
+        .run_with(Icebreaker::new)
 }
 
-struct Chat {
+struct Icebreaker {
     screen: Screen,
     system: Option<system::Information>,
 }
 
 #[derive(Debug, Clone)]
 enum Message {
+    Loaded {
+        last_chat: Result<Chat, Error>,
+        system: Box<system::Information>,
+    },
+    Escape,
     Search(search::Message),
     Boot(boot::Message),
     Conversation(conversation::Message),
-    SystemFetched(system::Information),
-    Escape,
 }
 
-impl Chat {
+impl Icebreaker {
     pub fn new() -> (Self, Task<Message>) {
-        let (search, task) = screen::Search::new();
-
         (
             Self {
-                screen: Screen::Search(search),
+                screen: Screen::Loading,
                 system: None,
             },
-            Task::batch([
-                system::fetch_information().map(Message::SystemFetched),
-                task.map(Message::Search),
-            ]),
+            Task::future(Chat::fetch_last_opened()).then(|last_chat| {
+                system::fetch_information()
+                    .map(Box::new)
+                    .map(move |system| Message::Loaded {
+                        last_chat: last_chat.clone(),
+                        system,
+                    })
+            }),
         )
     }
 
     fn title(&self) -> String {
         match &self.screen {
+            Screen::Loading => "Icebreaker".to_owned(),
             Screen::Search(search) => search.title(),
             Screen::Boot(boot) => boot.title(),
             Screen::Conversation(conversation) => conversation.title(),
@@ -60,6 +68,20 @@ impl Chat {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::Loaded { last_chat, system } => {
+                let backend = assistant::Backend::detect(&system.graphics_adapter);
+                self.system = Some(*system);
+
+                if let Ok(last_chat) = last_chat {
+                    let (conversation, task) = screen::Conversation::open(last_chat, backend);
+
+                    self.screen = Screen::Conversation(conversation);
+
+                    task.map(Message::Conversation)
+                } else {
+                    self.search()
+                }
+            }
             Message::Search(message) => {
                 if let Screen::Search(search) = &mut self.screen {
                     let action = search.update(message);
@@ -110,11 +132,6 @@ impl Chat {
                     Task::none()
                 }
             }
-            Message::SystemFetched(system) => {
-                self.system = Some(system);
-
-                Task::none()
-            }
             Message::Escape => {
                 if matches!(self.screen, Screen::Search(_)) {
                     Task::none()
@@ -127,6 +144,7 @@ impl Chat {
 
     fn view(&self) -> Element<Message> {
         match &self.screen {
+            Screen::Loading => screen::loading(),
             Screen::Search(search) => search.view().map(Message::Search),
             Screen::Boot(boot) => boot.view().map(Message::Boot),
             Screen::Conversation(conversation) => conversation.view().map(Message::Conversation),
@@ -137,6 +155,7 @@ impl Chat {
         use iced::keyboard;
 
         let screen = match &self.screen {
+            Screen::Loading => Subscription::none(),
             Screen::Search(search) => search.subscription().map(Message::Search),
             Screen::Boot(_) => Subscription::none(),
             Screen::Conversation(conversation) => {
