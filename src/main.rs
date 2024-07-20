@@ -84,9 +84,8 @@ impl Chat {
 
                     match action {
                         boot::Action::None => Task::none(),
-                        boot::Action::Run(task) => task.map(Message::Boot),
-                        boot::Action::Finish(assistant) => {
-                            let (conversation, task) = screen::Conversation::new(assistant);
+                        boot::Action::Boot { file, backend } => {
+                            let (conversation, task) = screen::Conversation::new(file, backend);
 
                             self.screen = Screen::Conversation(conversation);
 
@@ -139,8 +138,10 @@ impl Chat {
 
         let screen = match &self.screen {
             Screen::Search(search) => search.subscription().map(Message::Search),
-            Screen::Boot(boot) => boot.subscription().map(Message::Boot),
-            Screen::Conversation(_) => Subscription::none(),
+            Screen::Boot(_) => Subscription::none(),
+            Screen::Conversation(conversation) => {
+                conversation.subscription().map(Message::Conversation)
+            }
         };
 
         let hotkeys = keyboard::on_key_press(|key, _modifiers| match key {

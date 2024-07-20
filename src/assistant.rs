@@ -333,7 +333,7 @@ impl Assistant {
         &self,
         history: &[Message],
         message: &str,
-    ) -> impl Stream<Item = Result<ChatEvent, ChatError>> {
+    ) -> impl Stream<Item = Result<ChatEvent, Error>> {
         let model = self.model.clone();
         let history = history.to_vec();
         let message = message.to_owned();
@@ -498,27 +498,6 @@ pub enum ChatEvent {
     ExchangeOver,
 }
 
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum ChatError {
-    #[error("request failed: {0}")]
-    RequestFailed(Arc<reqwest::Error>),
-
-    #[error("deserialization failed: {0}")]
-    DecodingFailed(Arc<serde_json::Error>),
-}
-
-impl From<reqwest::Error> for ChatError {
-    fn from(error: reqwest::Error) -> Self {
-        Self::RequestFailed(Arc::new(error))
-    }
-}
-
-impl From<serde_json::Error> for ChatError {
-    fn from(error: serde_json::Error) -> Self {
-        Self::DecodingFailed(Arc::new(error))
-    }
-}
-
 #[derive(Debug)]
 enum Server {
     Container(String),
@@ -642,7 +621,7 @@ impl fmt::Display for Model {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-struct Id(String);
+pub struct Id(String);
 
 impl Id {
     pub fn name(&self) -> &str {
@@ -690,7 +669,7 @@ impl fmt::Display for Likes {
 
 #[derive(Debug, Clone)]
 pub struct File {
-    model: Id,
+    pub model: Id,
     pub name: String,
 }
 
@@ -704,6 +683,8 @@ pub enum Error {
     DockerFailed(&'static str),
     #[error("executor failed: {0}")]
     ExecutorFailed(&'static str),
+    #[error("deserialization failed: {0}")]
+    DecodingFailed(Arc<serde_json::Error>),
     #[error("no suitable executor was found: neither llama-server nor docker are installed")]
     NoExecutorAvailable,
 }
@@ -717,5 +698,11 @@ impl From<reqwest::Error> for Error {
 impl From<io::Error> for Error {
     fn from(error: io::Error) -> Self {
         Self::IOFailed(Arc::new(error))
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(error: serde_json::Error) -> Self {
+        Self::DecodingFailed(Arc::new(error))
     }
 }
