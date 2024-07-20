@@ -3,6 +3,7 @@
 mod data;
 mod icon;
 mod screen;
+mod widget;
 
 use crate::data::assistant;
 use crate::data::{Chat, Error};

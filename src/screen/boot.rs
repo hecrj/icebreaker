@@ -1,8 +1,9 @@
 use crate::data::assistant::{Backend, File, Model};
+use crate::widget::tip;
 
 use iced::border;
 use iced::system;
-use iced::widget::{button, center, column, container, row, scrollable, text, toggler, tooltip};
+use iced::widget::{button, center, column, container, row, scrollable, text, toggler};
 use iced::{Center, Element, Fill, Font, Theme};
 
 pub struct Boot {
@@ -71,12 +72,10 @@ impl Boot {
                     Message::UseCUDAToggled,
                 );
 
-                tooltip(
+                tip(
                     toggle,
-                    container(text("Only supported on NVIDIA cards!").size(12))
-                        .padding(5)
-                        .style(container::rounded_box),
-                    tooltip::Position::Left,
+                    "Only supported on NVIDIA cards!",
+                    tip::Position::Left,
                 )
             };
 

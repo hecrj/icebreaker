@@ -2,6 +2,7 @@ use crate::data::assistant::{self, Assistant, Backend, BootEvent, File};
 use crate::data::chat::{self, Chat, Entry, Id};
 use crate::data::Error;
 use crate::icon;
+use crate::widget::tip;
 
 use iced::border;
 use iced::clipboard;
@@ -348,7 +349,7 @@ impl Conversation {
                     .into(),
             };
 
-            let toggle_sidebar = tooltip(
+            let toggle_sidebar = tip(
                 button(if self.sidebar_open {
                     icon::collapse()
                 } else {
@@ -357,17 +358,12 @@ impl Conversation {
                 .padding(0)
                 .on_press(Message::ToggleSidebar)
                 .style(button::text),
-                container(
-                    text(if self.sidebar_open {
-                        "Close sidebar"
-                    } else {
-                        "Open sidebar"
-                    })
-                    .size(14),
-                )
-                .padding(5)
-                .style(container::rounded_box),
-                tooltip::Position::Right,
+                if self.sidebar_open {
+                    "Close sidebar"
+                } else {
+                    "Open sidebar"
+                },
+                tip::Position::Right,
             );
 
             let bar = stack![title, toggle_sidebar].into();
@@ -437,7 +433,7 @@ impl Conversation {
 
                     let progress = tooltip(
                         progress,
-                        container(logs).padding(10).style(container::rounded_box),
+                        container(logs).padding(10).style(container::dark),
                         tooltip::Position::Bottom,
                     );
 
@@ -604,18 +600,13 @@ fn message_bubble(message: &assistant::Message) -> Element<Message> {
         assistant::Message::User(_) => padding::left(20),
     });
 
-    let copy = tooltip(
+    let copy = tip(
         button(icon::clipboard())
             .on_press_with(|| Message::Copy(message.clone()))
             .padding(0)
             .style(button::text),
-        container(text("Copy to clipboard").size(12))
-            .padding(5)
-            .style(|theme: &Theme| container::Style {
-                background: Some(theme.extended_palette().secondary.weak.color.into()),
-                ..container::rounded_box(theme)
-            }),
-        tooltip::Position::Bottom,
+        "Copy to clipboard",
+        tip::Position::Bottom,
     );
 
     hover(
