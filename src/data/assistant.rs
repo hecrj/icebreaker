@@ -652,7 +652,7 @@ impl fmt::Display for Likes {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct File {
     pub model: Id,
     pub name: String,

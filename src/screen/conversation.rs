@@ -1,25 +1,29 @@
 use crate::data::assistant::{self, Assistant, Backend, BootEvent, File};
-use crate::data::chat::{self, Chat, Id};
+use crate::data::chat::{self, Chat, Entry, Id};
 use crate::data::Error;
 use crate::icon;
 
+use iced::border;
 use iced::clipboard;
 use iced::padding;
 use iced::task::{self, Task};
 use iced::time::{self, Duration, Instant};
 use iced::widget::{
-    self, button, center, column, container, hover, progress_bar, scrollable, stack, text,
+    self, button, center, column, container, hover, progress_bar, row, scrollable, stack, text,
     text_input, tooltip, value,
 };
 use iced::{Center, Element, Fill, Font, Left, Right, Subscription, Theme};
 
 pub struct Conversation {
+    backend: Backend,
+    chats: Vec<Entry>,
     state: State,
     id: Option<Id>,
     title: Option<String>,
     history: Vec<assistant::Message>,
     input: String,
     error: Option<Error>,
+    sidebar_open: bool,
 }
 
 enum State {
@@ -33,21 +37,26 @@ enum State {
     },
     Running {
         assistant: Assistant,
-        is_sending: bool,
+        sending: Option<task::Handle>,
     },
 }
 
 #[derive(Debug, Clone)]
 pub enum Message {
+    ChatsListed(Result<Vec<Entry>, Error>),
     Booting(Result<BootEvent, Error>),
     Tick(Instant),
     InputChanged(String),
     InputSubmitted,
     Chatting(Result<chat::Event, Error>),
     Copy(assistant::Message),
-    Back,
     Created(Result<Chat, Error>),
     Saved(Result<Chat, Error>),
+    Open(chat::Id),
+    ChatFetched(Result<Chat, Error>),
+    New,
+    Search,
+    ToggleSidebar,
 }
 
 pub enum Action {
@@ -63,6 +72,7 @@ impl Conversation {
 
         (
             Self {
+                backend,
                 state: State::Booting {
                     file,
                     logs: Vec::new(),
@@ -76,8 +86,14 @@ impl Conversation {
                 history: Vec::new(),
                 input: String::new(),
                 error: None,
+                chats: Vec::new(),
+                sidebar_open: true,
             },
-            Task::batch([boot, widget::focus_next()]),
+            Task::batch([
+                boot,
+                Task::perform(Chat::list(), Message::ChatsListed),
+                widget::focus_next(),
+            ]),
         )
     }
 
@@ -101,6 +117,16 @@ impl Conversation {
 
     pub fn update(&mut self, message: Message) -> Action {
         match message {
+            Message::ChatsListed(Ok(chats)) => {
+                self.chats = chats;
+
+                Action::None
+            }
+            Message::ChatsListed(Err(error)) => {
+                self.error = Some(dbg!(error));
+
+                Action::None
+            }
             Message::Booting(Ok(event)) => match event {
                 BootEvent::Progressed {
                     stage: new_stage,
@@ -126,7 +152,7 @@ impl Conversation {
                 BootEvent::Finished(assistant) => {
                     self.state = State::Running {
                         assistant,
-                        is_sending: false,
+                        sending: None,
                     };
 
                     Action::None
@@ -151,22 +177,21 @@ impl Conversation {
                 Action::None
             }
             Message::InputSubmitted => {
-                if let State::Running {
-                    assistant,
-                    is_sending,
-                } = &mut self.state
-                {
-                    *is_sending = true;
-
-                    Action::Run(Task::run(
+                if let State::Running { assistant, sending } = &mut self.state {
+                    let (send, handle) = Task::run(
                         chat::send(assistant, &self.history, &self.input),
                         Message::Chatting,
-                    ))
+                    )
+                    .abortable();
+
+                    *sending = Some(handle.abort_on_drop());
+
+                    Action::Run(send)
                 } else {
                     Action::None
                 }
             }
-            Message::Chatting(Ok(event)) => match event {
+            Message::Chatting(Ok(event)) if !self.can_send() => match event {
                 chat::Event::TitleChanged(title) => {
                     self.title = Some(title);
 
@@ -192,12 +217,10 @@ impl Conversation {
                 }
                 chat::Event::ExchangeOver => {
                     if let State::Running {
-                        is_sending,
-                        assistant,
-                        ..
+                        sending, assistant, ..
                     } = &mut self.state
                     {
-                        *is_sending = false;
+                        *sending = None;
 
                         if let Some(id) = &self.id {
                             Action::Run(Task::perform(
@@ -224,24 +247,75 @@ impl Conversation {
                     }
                 }
             },
+            Message::Chatting(Ok(_outdated_event)) => Action::None,
             Message::Chatting(Err(error)) => {
                 self.error = Some(dbg!(error));
 
-                if let State::Running { is_sending, .. } = &mut self.state {
-                    *is_sending = false;
+                if let State::Running { sending, .. } = &mut self.state {
+                    *sending = None;
                 }
 
                 Action::None
             }
             Message::Copy(message) => Action::Run(clipboard::write(message.content().to_owned())),
-            Message::Back => Action::Back,
             Message::Created(Ok(chat)) | Message::Saved(Ok(chat)) => {
                 self.id = Some(chat.id);
 
-                Action::None
+                Action::Run(Task::perform(Chat::list(), Message::ChatsListed))
             }
             Message::Created(Err(error)) | Message::Saved(Err(error)) => {
                 self.error = Some(dbg!(error));
+
+                Action::None
+            }
+            Message::Open(chat) => {
+                Action::Run(Task::perform(Chat::fetch(chat), Message::ChatFetched))
+            }
+            Message::ChatFetched(Ok(chat)) => match &mut self.state {
+                State::Booting { file, .. } if file == &chat.file => {
+                    self.id = Some(chat.id);
+                    self.title = chat.title;
+                    self.history = chat.history;
+                    self.input = String::new();
+
+                    Action::Run(widget::focus_next())
+                }
+                State::Running { assistant, sending } if assistant.file() == &chat.file => {
+                    self.id = Some(chat.id);
+                    self.title = chat.title;
+                    self.history = chat.history;
+                    self.input = String::new();
+                    self.error = None;
+
+                    *sending = None;
+
+                    Action::Run(widget::focus_next())
+                }
+                _ => {
+                    let (conversation, task) = Self::open(chat, self.backend);
+
+                    *self = conversation;
+
+                    Action::Run(task)
+                }
+            },
+            Message::ChatFetched(Err(error)) => {
+                self.error = Some(dbg!(error));
+
+                Action::None
+            }
+            Message::New => {
+                self.id = None;
+                self.title = None;
+                self.history = Vec::new();
+                self.input = String::new();
+                self.error = None;
+
+                Action::Run(widget::focus_next())
+            }
+            Message::Search => Action::Back,
+            Message::ToggleSidebar => {
+                self.sidebar_open = !self.sidebar_open;
 
                 Action::None
             }
@@ -270,18 +344,29 @@ impl Conversation {
                     .into(),
             };
 
-            let back = tooltip(
-                button(text("←").size(20))
-                    .padding(0)
-                    .on_press(Message::Back)
-                    .style(button::text),
-                container(text("Back to search").size(14))
-                    .padding(5)
-                    .style(container::rounded_box),
+            let toggle_sidebar = tooltip(
+                button(if self.sidebar_open {
+                    icon::collapse()
+                } else {
+                    icon::expand()
+                })
+                .padding(0)
+                .on_press(Message::ToggleSidebar)
+                .style(button::text),
+                container(
+                    text(if self.sidebar_open {
+                        "Close sidebar"
+                    } else {
+                        "Open sidebar"
+                    })
+                    .size(14),
+                )
+                .padding(5)
+                .style(container::rounded_box),
                 tooltip::Position::Right,
             );
 
-            let bar = hover(title, container(back).center_y(Fill));
+            let bar = stack![title, toggle_sidebar].into();
 
             match &self.state {
                 State::Booting {
@@ -397,11 +482,71 @@ impl Conversation {
             }
         };
 
-        column![header, messages, input]
-            .spacing(10)
-            .padding(10)
-            .align_x(Center)
-            .into()
+        let chat = column![header, messages, input].spacing(10).align_x(Center);
+
+        if self.sidebar_open {
+            let sidebar = {
+                let chats = column(self.chats.iter().map(|chat| {
+                    let card: Element<_> = match &chat.title {
+                        Some(title) => {
+                            let title = text(title).font(Font::MONOSPACE);
+                            let subtitle =
+                                text(chat.file.model.name()).font(Font::MONOSPACE).size(12);
+
+                            column![title, subtitle].spacing(3).into()
+                        }
+                        None => text(chat.file.model.name()).font(Font::MONOSPACE).into(),
+                    };
+
+                    let is_active = Some(&chat.id) == self.id.as_ref();
+
+                    if is_active {
+                        container(card)
+                            .style(|theme: &Theme| {
+                                let pair = theme.extended_palette().secondary.weak;
+
+                                container::Style {
+                                    background: Some(pair.color.into()),
+                                    text_color: Some(pair.text),
+                                    border: border::rounded(2),
+                                    ..container::Style::default()
+                                }
+                            })
+                            .padding(5)
+                            .width(Fill)
+                            .into()
+                    } else {
+                        button(card)
+                            .on_press_with(move || Message::Open(chat.id.clone()))
+                            .padding(5)
+                            .width(Fill)
+                            .style(|theme: &Theme, status: button::Status| match status {
+                                button::Status::Active => button::text(theme, status),
+                                _ => button::secondary(theme, status),
+                            })
+                            .into()
+                    }
+                }))
+                .clip(true)
+                .spacing(10);
+
+                let new = button(text("New Chat").width(Fill).align_x(Center))
+                    .on_press(Message::New)
+                    .style(button::success);
+
+                let search = button(text("Search Models").width(Fill).align_x(Center))
+                    .on_press(Message::Search)
+                    .style(button::secondary);
+
+                column![scrollable(chats).height(Fill), new, search]
+                    .width(250)
+                    .spacing(10)
+            };
+
+            row![sidebar, chat].spacing(10).padding(10).into()
+        } else {
+            chat.padding(10).into()
+        }
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
@@ -419,13 +564,7 @@ impl Conversation {
     }
 
     pub fn can_send(&self) -> bool {
-        matches!(
-            self.state,
-            State::Running {
-                is_sending: false,
-                ..
-            }
-        )
+        matches!(self.state, State::Running { sending: None, .. })
     }
 }
 

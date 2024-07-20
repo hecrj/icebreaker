@@ -31,16 +31,13 @@ impl Chat {
         Ok(storage_dir().await?.join(format!("{}.json", id.0.simple())))
     }
 
-    #[allow(dead_code)]
     pub async fn list() -> Result<Vec<Entry>, Error> {
         let list = List::fetch().await?;
 
         Ok(list.entries)
     }
 
-    pub async fn fetch_last_opened() -> Result<Self, Error> {
-        let LastOpened(id) = LastOpened::fetch().await?;
-
+    pub async fn fetch(id: Id) -> Result<Self, Error> {
         let bytes = fs::read(Self::path(&id).await?).await?;
         let schema: Schema = task::spawn_blocking(move || serde_json::from_slice(&bytes)).await??;
 
@@ -50,6 +47,12 @@ impl Chat {
             title: schema.title,
             history: schema.history,
         })
+    }
+
+    pub async fn fetch_last_opened() -> Result<Self, Error> {
+        let LastOpened(id) = LastOpened::fetch().await?;
+
+        Self::fetch(id).await
     }
 
     pub async fn create(
@@ -189,10 +192,10 @@ pub fn send(
     })
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Id(Uuid);
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Entry {
     pub id: Id,
     pub file: assistant::File,
@@ -212,19 +215,22 @@ impl List {
     async fn fetch() -> Result<Self, Error> {
         let path = Self::path().await?;
 
-        let list: Self = {
-            let bytes = fs::read(&path).await?;
+        let bytes = fs::read(&path).await;
 
-            task::spawn_blocking(move || serde_json::from_slice(&bytes).ok()).await?
-        }
-        .unwrap_or_default();
+        let Ok(bytes) = bytes else {
+            return Ok(List::default());
+        };
+
+        let list: Self =
+            { task::spawn_blocking(move || serde_json::from_slice(&bytes).ok()).await? }
+                .unwrap_or_default();
 
         Ok(list)
     }
 
     async fn push(entry: Entry) -> Result<(), Error> {
         let mut list = Self::fetch().await.unwrap_or_default();
-        list.entries.push(entry);
+        list.entries.insert(0, entry);
 
         let json = task::spawn_blocking(move || serde_json::to_vec_pretty(&list)).await?;
 

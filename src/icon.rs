@@ -27,6 +27,14 @@ pub fn clipboard<'a>() -> Text<'a> {
     with_codepoint('\u{E805}')
 }
 
+pub fn collapse<'a>() -> Text<'a> {
+    with_codepoint('\u{E806}')
+}
+
+pub fn expand<'a>() -> Text<'a> {
+    with_codepoint('\u{E807}')
+}
+
 fn with_codepoint<'a>(codepoint: char) -> Text<'a> {
     const FONT: Font = Font::with_name("icebreaker-icons");
 
