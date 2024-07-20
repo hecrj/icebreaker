@@ -10,8 +10,8 @@ use iced::padding;
 use iced::task::{self, Task};
 use iced::time::{self, Duration, Instant};
 use iced::widget::{
-    self, button, center, column, container, hover, progress_bar, row, scrollable, stack, text,
-    text_input, tooltip, value,
+    self, button, center, column, container, horizontal_space, hover, progress_bar, row,
+    scrollable, stack, text, text_input, tooltip, value,
 };
 use iced::{Center, Element, Fill, Font, Left, Right, Subscription, Theme};
 
@@ -55,6 +55,7 @@ pub enum Message {
     Saved(Result<Chat, Error>),
     Open(chat::Id),
     ChatFetched(Result<Chat, Error>),
+    Delete,
     New,
     Search,
     ToggleSidebar,
@@ -318,6 +319,18 @@ impl Conversation {
 
                 Action::Run(widget::focus_next())
             }
+            Message::Delete => {
+                if let Some(id) = self.id.clone() {
+                    Action::Run(Task::future(Chat::delete(id)).and_then(|_| {
+                        Task::batch([
+                            Task::perform(Chat::fetch_last_opened(), Message::ChatFetched),
+                            Task::perform(Chat::list(), Message::ChatsListed),
+                        ])
+                    }))
+                } else {
+                    Action::None
+                }
+            }
             Message::Search => Action::Back,
             Message::ToggleSidebar => {
                 self.sidebar_open = !self.sidebar_open;
@@ -366,7 +379,16 @@ impl Conversation {
                 tip::Position::Right,
             );
 
-            let bar = stack![title, toggle_sidebar].into();
+            let delete = tip(
+                button(icon::trash().style(text::danger))
+                    .padding(0)
+                    .on_press(Message::Delete)
+                    .style(button::text),
+                "Delete Chat",
+                tip::Position::Left,
+            );
+
+            let bar = stack![title, row![toggle_sidebar, horizontal_space(), delete]].into();
 
             match &self.state {
                 State::Booting {

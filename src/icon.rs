@@ -35,6 +35,10 @@ pub fn expand<'a>() -> Text<'a> {
     with_codepoint('\u{E807}')
 }
 
+pub fn trash<'a>() -> Text<'a> {
+    with_codepoint('\u{E808}')
+}
+
 fn with_codepoint<'a>(codepoint: char) -> Text<'a> {
     const FONT: Font = Font::with_name("icebreaker-icons");
 

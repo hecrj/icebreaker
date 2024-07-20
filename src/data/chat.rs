@@ -100,6 +100,30 @@ impl Chat {
             history: chat.history,
         })
     }
+
+    pub async fn delete(id: Id) -> Result<(), Error> {
+        fs::remove_file(Self::path(&id).await?).await?;
+
+        let _ = List::remove(&id).await;
+
+        match LastOpened::fetch().await {
+            Ok(LastOpened(last_opened)) if id == last_opened => {
+                let list = List::fetch().await.ok();
+
+                match list.as_ref().and_then(|list| list.entries.first()) {
+                    Some(entry) => {
+                        LastOpened::update(entry.id.clone()).await?;
+                    }
+                    None => {
+                        LastOpened::delete().await?;
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -232,7 +256,18 @@ impl List {
         let mut list = Self::fetch().await.unwrap_or_default();
         list.entries.insert(0, entry);
 
-        let json = task::spawn_blocking(move || serde_json::to_vec_pretty(&list)).await?;
+        list.save().await
+    }
+
+    async fn remove(id: &Id) -> Result<(), Error> {
+        let mut list = List::fetch().await?;
+        list.entries.retain(|entry| &entry.id != id);
+
+        list.save().await
+    }
+
+    async fn save(self) -> Result<(), Error> {
+        let json = task::spawn_blocking(move || serde_json::to_vec_pretty(&self)).await?;
 
         fs::write(Self::path().await?, json?).await?;
 
@@ -259,6 +294,12 @@ impl LastOpened {
         let json = serde_json::to_vec(&LastOpened(id))?;
 
         fs::write(Self::path().await?, json).await?;
+
+        Ok(())
+    }
+
+    async fn delete() -> Result<(), Error> {
+        fs::remove_file(Self::path().await?).await?;
 
         Ok(())
     }
