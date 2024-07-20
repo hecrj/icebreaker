@@ -379,14 +379,18 @@ impl Conversation {
                 tip::Position::Right,
             );
 
-            let delete = tip(
-                button(icon::trash().style(text::danger))
-                    .padding(0)
-                    .on_press(Message::Delete)
-                    .style(button::text),
-                "Delete Chat",
-                tip::Position::Left,
-            );
+            let delete: Element<_> = if self.id.is_some() {
+                tip(
+                    button(icon::trash().style(text::danger))
+                        .padding(0)
+                        .on_press(Message::Delete)
+                        .style(button::text),
+                    "Delete Chat",
+                    tip::Position::Left,
+                )
+            } else {
+                horizontal_space().into()
+            };
 
             let bar = stack![title, row![toggle_sidebar, horizontal_space(), delete]].into();
 
