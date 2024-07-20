@@ -524,6 +524,7 @@ pub struct Model {
 }
 
 impl Model {
+    const HF_URL: &'static str = "https://huggingface.co";
     const API_URL: &'static str = "https://huggingface.co/api";
 
     pub async fn list() -> Result<Vec<Self>, Error> {
@@ -588,6 +589,17 @@ impl Model {
                     .collect(),
             })
             .collect())
+    }
+
+    pub async fn fetch_readme(self) -> Result<String, Error> {
+        let response = reqwest::get(format!(
+            "{url}/{id}/raw/main/README.md",
+            url = Self::HF_URL,
+            id = self.id.0
+        ))
+        .await?;
+
+        Ok(response.text().await?)
     }
 
     pub fn name(&self) -> &str {
@@ -656,4 +668,10 @@ impl fmt::Display for Likes {
 pub struct File {
     pub model: Id,
     pub name: String,
+}
+
+impl fmt::Display for File {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.name)
+    }
 }

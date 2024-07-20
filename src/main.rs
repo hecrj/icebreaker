@@ -91,10 +91,11 @@ impl Icebreaker {
                         search::Action::None => Task::none(),
                         search::Action::Run(task) => task.map(Message::Search),
                         search::Action::Boot(model) => {
-                            self.screen =
-                                Screen::Boot(screen::Boot::new(model, self.system.as_ref()));
+                            let (boot, task) = screen::Boot::new(model, self.system.as_ref());
 
-                            Task::none()
+                            self.screen = Screen::Boot(boot);
+
+                            task.map(Message::Boot)
                         }
                     }
                 } else {

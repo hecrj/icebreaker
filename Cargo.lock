@@ -319,6 +319,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
+name = "bincode"
+version = "1.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1f45e9417d87227c7a56d22e471c6206462cba514c7590c09aff4cf6d1ddcad"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "bit-set"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -798,6 +807,15 @@ name = "dconf_rs"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7046468a81e6a002061c01e6a7c83139daf91b11c30e66795b13217c2d885c8b"
+
+[[package]]
+name = "deranged"
+version = "0.3.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b42b6fa04a440b495c8b04d0e71b707c585f83cb9cb28cf8cd0d976c315e31b4"
+dependencies = [
+ "powerfmt",
+]
 
 [[package]]
 name = "detect-desktop-environment"
@@ -1295,6 +1313,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "getopts"
+version = "0.2.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14dbbfd5c71d70241ecf9e6f13737f7b5ce823821063188d7e46c41d371eebd5"
+dependencies = [
+ "unicode-width",
+]
+
+[[package]]
 name = "getrandom"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1678,10 +1705,11 @@ dependencies = [
 [[package]]
 name = "iced"
 version = "0.13.0-dev"
-source = "git+https://github.com/iced-rs/iced.git?rev=7b0945729a23b90b05a26cd7c10a6a7ba1a46f15#7b0945729a23b90b05a26cd7c10a6a7ba1a46f15"
+source = "git+https://github.com/iced-rs/iced.git?rev=4b44079f34aa9e01977a7974e5f49ae79ff6cd90#4b44079f34aa9e01977a7974e5f49ae79ff6cd90"
 dependencies = [
  "iced_core",
  "iced_futures",
+ "iced_highlighter",
  "iced_renderer",
  "iced_widget",
  "iced_winit",
@@ -1691,7 +1719,7 @@ dependencies = [
 [[package]]
 name = "iced_core"
 version = "0.13.0-dev"
-source = "git+https://github.com/iced-rs/iced.git?rev=7b0945729a23b90b05a26cd7c10a6a7ba1a46f15#7b0945729a23b90b05a26cd7c10a6a7ba1a46f15"
+source = "git+https://github.com/iced-rs/iced.git?rev=4b44079f34aa9e01977a7974e5f49ae79ff6cd90#4b44079f34aa9e01977a7974e5f49ae79ff6cd90"
 dependencies = [
  "bitflags 2.6.0",
  "bytes",
@@ -1710,7 +1738,7 @@ dependencies = [
 [[package]]
 name = "iced_futures"
 version = "0.13.0-dev"
-source = "git+https://github.com/iced-rs/iced.git?rev=7b0945729a23b90b05a26cd7c10a6a7ba1a46f15#7b0945729a23b90b05a26cd7c10a6a7ba1a46f15"
+source = "git+https://github.com/iced-rs/iced.git?rev=4b44079f34aa9e01977a7974e5f49ae79ff6cd90#4b44079f34aa9e01977a7974e5f49ae79ff6cd90"
 dependencies = [
  "futures",
  "iced_core",
@@ -1724,7 +1752,7 @@ dependencies = [
 [[package]]
 name = "iced_graphics"
 version = "0.13.0-dev"
-source = "git+https://github.com/iced-rs/iced.git?rev=7b0945729a23b90b05a26cd7c10a6a7ba1a46f15#7b0945729a23b90b05a26cd7c10a6a7ba1a46f15"
+source = "git+https://github.com/iced-rs/iced.git?rev=4b44079f34aa9e01977a7974e5f49ae79ff6cd90#4b44079f34aa9e01977a7974e5f49ae79ff6cd90"
 dependencies = [
  "bitflags 2.6.0",
  "bytemuck",
@@ -1741,9 +1769,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "iced_highlighter"
+version = "0.13.0-dev"
+source = "git+https://github.com/iced-rs/iced.git?rev=4b44079f34aa9e01977a7974e5f49ae79ff6cd90#4b44079f34aa9e01977a7974e5f49ae79ff6cd90"
+dependencies = [
+ "iced_core",
+ "once_cell",
+ "syntect",
+]
+
+[[package]]
 name = "iced_renderer"
 version = "0.13.0-dev"
-source = "git+https://github.com/iced-rs/iced.git?rev=7b0945729a23b90b05a26cd7c10a6a7ba1a46f15#7b0945729a23b90b05a26cd7c10a6a7ba1a46f15"
+source = "git+https://github.com/iced-rs/iced.git?rev=4b44079f34aa9e01977a7974e5f49ae79ff6cd90#4b44079f34aa9e01977a7974e5f49ae79ff6cd90"
 dependencies = [
  "iced_graphics",
  "iced_tiny_skia",
@@ -1755,7 +1793,7 @@ dependencies = [
 [[package]]
 name = "iced_runtime"
 version = "0.13.0-dev"
-source = "git+https://github.com/iced-rs/iced.git?rev=7b0945729a23b90b05a26cd7c10a6a7ba1a46f15#7b0945729a23b90b05a26cd7c10a6a7ba1a46f15"
+source = "git+https://github.com/iced-rs/iced.git?rev=4b44079f34aa9e01977a7974e5f49ae79ff6cd90#4b44079f34aa9e01977a7974e5f49ae79ff6cd90"
 dependencies = [
  "bytes",
  "iced_core",
@@ -1767,7 +1805,7 @@ dependencies = [
 [[package]]
 name = "iced_tiny_skia"
 version = "0.13.0-dev"
-source = "git+https://github.com/iced-rs/iced.git?rev=7b0945729a23b90b05a26cd7c10a6a7ba1a46f15#7b0945729a23b90b05a26cd7c10a6a7ba1a46f15"
+source = "git+https://github.com/iced-rs/iced.git?rev=4b44079f34aa9e01977a7974e5f49ae79ff6cd90#4b44079f34aa9e01977a7974e5f49ae79ff6cd90"
 dependencies = [
  "bytemuck",
  "cosmic-text",
@@ -1783,7 +1821,7 @@ dependencies = [
 [[package]]
 name = "iced_wgpu"
 version = "0.13.0-dev"
-source = "git+https://github.com/iced-rs/iced.git?rev=7b0945729a23b90b05a26cd7c10a6a7ba1a46f15#7b0945729a23b90b05a26cd7c10a6a7ba1a46f15"
+source = "git+https://github.com/iced-rs/iced.git?rev=4b44079f34aa9e01977a7974e5f49ae79ff6cd90#4b44079f34aa9e01977a7974e5f49ae79ff6cd90"
 dependencies = [
  "bitflags 2.6.0",
  "bytemuck",
@@ -1803,12 +1841,14 @@ dependencies = [
 [[package]]
 name = "iced_widget"
 version = "0.13.0-dev"
-source = "git+https://github.com/iced-rs/iced.git?rev=7b0945729a23b90b05a26cd7c10a6a7ba1a46f15#7b0945729a23b90b05a26cd7c10a6a7ba1a46f15"
+source = "git+https://github.com/iced-rs/iced.git?rev=4b44079f34aa9e01977a7974e5f49ae79ff6cd90#4b44079f34aa9e01977a7974e5f49ae79ff6cd90"
 dependencies = [
+ "iced_highlighter",
  "iced_renderer",
  "iced_runtime",
  "num-traits",
  "once_cell",
+ "pulldown-cmark",
  "rustc-hash 2.0.0",
  "thiserror",
  "unicode-segmentation",
@@ -1817,7 +1857,7 @@ dependencies = [
 [[package]]
 name = "iced_winit"
 version = "0.13.0-dev"
-source = "git+https://github.com/iced-rs/iced.git?rev=7b0945729a23b90b05a26cd7c10a6a7ba1a46f15#7b0945729a23b90b05a26cd7c10a6a7ba1a46f15"
+source = "git+https://github.com/iced-rs/iced.git?rev=4b44079f34aa9e01977a7974e5f49ae79ff6cd90#4b44079f34aa9e01977a7974e5f49ae79ff6cd90"
 dependencies = [
  "iced_futures",
  "iced_graphics",
@@ -2046,6 +2086,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "linked-hash-map"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0717cef1bc8b636c6e1c1bbdefc09e6322da8a9321966e8928ef80d20f7f770f"
+
+[[package]]
 name = "linux-raw-sys"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2251,6 +2297,12 @@ checksum = "e8a3895c6391c39d7fe7ebc444a87eb2991b2a0bc718fdabd071eec617fc68e4"
 dependencies = [
  "winapi",
 ]
+
+[[package]]
+name = "num-conv"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "51d515d32fb182ee37cda2ccdcb92950d6a3c2893aa280e540671c2cd0f3b1d9"
 
 [[package]]
 name = "num-traits"
@@ -2550,6 +2602,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
 
 [[package]]
+name = "onig"
+version = "6.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8c4b31c8722ad9171c6d77d3557db078cab2bd50afcc9d09c8b315c59df8ca4f"
+dependencies = [
+ "bitflags 1.3.2",
+ "libc",
+ "once_cell",
+ "onig_sys",
+]
+
+[[package]]
+name = "onig_sys"
+version = "69.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b829e3d7e9cc74c7e315ee8edb185bf4190da5acde74afd7fc59c35b1f086e7"
+dependencies = [
+ "cc",
+ "pkg-config",
+]
+
+[[package]]
 name = "open"
 version = "5.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2836,6 +2910,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d231b230927b5e4ad203db57bbcbee2802f6bce620b1e4a9024a07d94e2907ec"
 
 [[package]]
+name = "plist"
+version = "1.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "42cf17e9a1800f5f396bc67d193dc9411b59012a5876445ef450d449881e1016"
+dependencies = [
+ "base64",
+ "indexmap",
+ "quick-xml 0.32.0",
+ "serde",
+ "time",
+]
+
+[[package]]
 name = "png"
 version = "0.17.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2862,6 +2949,12 @@ dependencies = [
  "tracing",
  "windows-sys 0.52.0",
 ]
+
+[[package]]
+name = "powerfmt"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "439ee305def115ba05938db6eb1644ff94165c5ab5e9420d1c1bcedbba909391"
 
 [[package]]
 name = "ppv-lite86"
@@ -2898,6 +2991,34 @@ name = "profiling"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "43d84d1d7a6ac92673717f9f6d1518374ef257669c24ebc5ac25d5033828be58"
+
+[[package]]
+name = "pulldown-cmark"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8746739f11d39ce5ad5c2520a9b75285310dbfe78c541ccf832d38615765aec0"
+dependencies = [
+ "bitflags 2.6.0",
+ "getopts",
+ "memchr",
+ "pulldown-cmark-escape",
+ "unicase",
+]
+
+[[package]]
+name = "pulldown-cmark-escape"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "007d8adb5ddab6f8e3f491ac63566a7d5002cc7ed73901f72057943fa71ae1ae"
+
+[[package]]
+name = "quick-xml"
+version = "0.32.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d3a6e5838b60e0e8fa7a43f22ade549a37d61f8bdbe636d0d7816191de969c2"
+dependencies = [
+ "memchr",
+]
 
 [[package]]
 name = "quick-xml"
@@ -3032,6 +3153,12 @@ dependencies = [
  "libredox 0.1.3",
  "thiserror",
 ]
+
+[[package]]
+name = "regex-syntax"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a66a03ae7c801facd77a29370b4faec201768915ac14a721ba36f20bc9c209b"
 
 [[package]]
 name = "renderdoc-sys"
@@ -3650,6 +3777,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7065abeca94b6a8a577f9bd45aa0867a2238b74e8eb67cf10d492bc39351394"
 
 [[package]]
+name = "syntect"
+version = "5.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "874dcfa363995604333cf947ae9f751ca3af4522c60886774c4963943b4746b1"
+dependencies = [
+ "bincode",
+ "bitflags 1.3.2",
+ "flate2",
+ "fnv",
+ "once_cell",
+ "onig",
+ "plist",
+ "regex-syntax",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "thiserror",
+ "walkdir",
+ "yaml-rust",
+]
+
+[[package]]
 name = "sys-locale"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3733,6 +3882,37 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.71",
+]
+
+[[package]]
+name = "time"
+version = "0.3.36"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5dfd88e563464686c916c7e46e623e520ddc6d79fa6641390f2e3fa86e83e885"
+dependencies = [
+ "deranged",
+ "itoa",
+ "num-conv",
+ "powerfmt",
+ "serde",
+ "time-core",
+ "time-macros",
+]
+
+[[package]]
+name = "time-core"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef927ca75afb808a4d64dd374f00a2adf8d0fcff8e7b184af886c3c87ec4a3f3"
+
+[[package]]
+name = "time-macros"
+version = "0.2.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f252a68540fde3a3877aeea552b832b40ab9a69e318efd078774a01ddee1ccf"
+dependencies = [
+ "num-conv",
+ "time-core",
 ]
 
 [[package]]
@@ -3965,6 +4145,15 @@ dependencies = [
  "memoffset",
  "tempfile",
  "winapi",
+]
+
+[[package]]
+name = "unicase"
+version = "2.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7d2d4dafb69621809a81864c9c1b864479e1235c0dd4e199924b9742439ed89"
+dependencies = [
+ "version_check",
 ]
 
 [[package]]
@@ -4332,7 +4521,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7b56f89937f1cf2ee1f1259cf2936a17a1f45d8f0aa1019fae6d470d304cfa6"
 dependencies = [
  "proc-macro2",
- "quick-xml",
+ "quick-xml 0.34.0",
  "quote",
 ]
 
@@ -4913,6 +5102,15 @@ name = "xmlwriter"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
+
+[[package]]
+name = "yaml-rust"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56c1936c4cc7a1c9ab21a1ebb602eb942ba868cbd44a99cb7cdc5892335e1c85"
+dependencies = [
+ "linked-hash-map",
+]
 
 [[package]]
 name = "yazi"

@@ -1,19 +1,25 @@
 use crate::data::assistant::{Backend, File, Model};
 use crate::widget::tip;
 
-use iced::border;
 use iced::system;
-use iced::widget::{button, center, column, container, row, scrollable, text, toggler};
-use iced::{Center, Element, Fill, Font, Theme};
+use iced::widget::{
+    button, center, column, container, horizontal_space, markdown, pick_list, rich_text, row,
+    scrollable, span, text, toggler,
+};
+use iced::{Center, Element, Fill, Font, Task, Theme};
 
 pub struct Boot {
     model: Model,
+    file: Option<File>,
+    readme: Vec<markdown::Item>,
     use_cuda: bool,
 }
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    Boot(File),
+    ReadmeFetched(Vec<markdown::Item>),
+    FileSelected(File),
+    Boot,
     Abort,
     UseCUDAToggled(bool),
 }
@@ -25,13 +31,32 @@ pub enum Action {
 }
 
 impl Boot {
-    pub fn new(model: Model, system: Option<&system::Information>) -> Self {
-        Self {
-            model: model.clone(),
-            use_cuda: system
-                .map(|system| Backend::detect(&system.graphics_adapter) == Backend::Cuda)
-                .unwrap_or_default(),
-        }
+    pub fn new(model: Model, system: Option<&system::Information>) -> (Self, Task<Message>) {
+        (
+            Self {
+                model: model.clone(),
+                file: if model.files.len() == 1 {
+                    model.files.first().cloned()
+                } else {
+                    None
+                },
+                readme: Vec::new(),
+                use_cuda: system
+                    .map(|system| Backend::detect(&system.graphics_adapter) == Backend::Cuda)
+                    .unwrap_or_default(),
+            },
+            Task::future(model.fetch_readme())
+                .and_then(|readme| {
+                    Task::future(async move {
+                        tokio::task::spawn_blocking(move || {
+                            markdown::parse(&readme, Theme::TokyoNight.palette()).collect()
+                        })
+                        .await
+                        .unwrap_or_default()
+                    })
+                })
+                .map(Message::ReadmeFetched),
+        )
     }
 
     pub fn title(&self) -> String {
@@ -40,14 +65,30 @@ impl Boot {
 
     pub fn update(&mut self, message: Message) -> Action {
         match message {
-            Message::Boot(file) => Action::Boot {
-                file,
-                backend: if self.use_cuda {
-                    Backend::Cuda
+            Message::ReadmeFetched(readme) => {
+                self.readme = readme;
+
+                Action::None
+            }
+            Message::FileSelected(file) => {
+                self.file = Some(file);
+
+                Action::None
+            }
+            Message::Boot => {
+                if let Some(file) = self.file.clone() {
+                    Action::Boot {
+                        file,
+                        backend: if self.use_cuda {
+                            Backend::Cuda
+                        } else {
+                            Backend::Cpu
+                        },
+                    }
                 } else {
-                    Backend::Cpu
-                },
-            },
+                    Action::None
+                }
+            }
             Message::Abort => Action::Abort,
             Message::UseCUDAToggled(use_cuda) => {
                 self.use_cuda = use_cuda;
@@ -58,13 +99,9 @@ impl Boot {
     }
 
     pub fn view(&self) -> Element<Message> {
-        let title = {
-            text!("Booting {name}...", name = self.model.name(),)
-                .size(20)
-                .font(Font::MONOSPACE)
-        };
+        let title = text(self.model.name()).size(20).font(Font::MONOSPACE);
 
-        let state = {
+        let boot = {
             let use_cuda = {
                 let toggle = toggler(
                     Some("Use CUDA".to_owned()),
@@ -79,45 +116,56 @@ impl Boot {
                 )
             };
 
+            let boot = action("Boot")
+                .style(button::success)
+                .on_press_maybe(self.file.is_some().then_some(Message::Boot));
+
             let abort = action("Abort")
                 .style(button::danger)
                 .on_press(Message::Abort);
 
+            let file = pick_list(
+                self.model.files.as_slice(),
+                self.file.as_ref(),
+                Message::FileSelected,
+            )
+            .width(Fill)
+            .placeholder("Select a file to boot...");
+
             column![
-                row![text("Select a file to boot:").width(Fill), use_cuda, abort]
+                file,
+                row![abort, horizontal_space(), use_cuda, boot]
                     .spacing(10)
-                    .align_y(Center),
-                scrollable(
-                    column(self.model.files.iter().map(|file| {
-                        button(text(&file.name).font(Font::MONOSPACE))
-                            .on_press(Message::Boot(file.clone()))
-                            .width(Fill)
-                            .padding(10)
-                            .style(button::secondary)
-                            .into()
-                    }))
-                    .spacing(10)
-                )
-                .spacing(10)
+                    .align_y(Center)
             ]
             .spacing(10)
         };
 
-        let frame = container(state)
-            .padding(10)
-            .style(|theme: &Theme| container::Style {
-                border: border::rounded(2).width(1).color(theme.palette().text),
-                ..container::Style::default()
-            })
-            .width(800)
-            .height(600);
-
-        center(column![title, frame].spacing(10).align_x(Center))
-            .padding(10)
+        let readme: Element<_> = if self.readme.is_empty() {
+            center(rich_text![
+                "Loading ",
+                span("README").font(Font::MONOSPACE),
+                "..."
+            ])
             .into()
+        } else {
+            scrollable(markdown(&self.readme))
+                .spacing(10)
+                .height(Fill)
+                .into()
+        };
+
+        center(
+            column![title, readme, boot]
+                .max_width(600)
+                .spacing(10)
+                .align_x(Center),
+        )
+        .padding(10)
+        .into()
     }
 }
 
 fn action(text: &str) -> button::Button<Message> {
-    button(container(text).center_x(Fill)).width(70)
+    button(container(text).center_x(Fill)).width(100)
 }
