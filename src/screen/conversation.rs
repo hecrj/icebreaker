@@ -311,6 +311,10 @@ impl Conversation {
                 self.input = String::new();
                 self.error = None;
 
+                if let State::Running { sending, .. } = &mut self.state {
+                    *sending = None;
+                }
+
                 Action::Run(widget::focus_next())
             }
             Message::Search => Action::Back,
