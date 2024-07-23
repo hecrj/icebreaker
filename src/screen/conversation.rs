@@ -55,6 +55,7 @@ pub enum Message {
     Saved(Result<Chat, Error>),
     Open(chat::Id),
     ChatFetched(Result<Chat, Error>),
+    LastChatFetched(Result<Chat, Error>),
     Delete,
     New,
     Search,
@@ -273,40 +274,42 @@ impl Conversation {
             Message::Open(chat) => {
                 Action::Run(Task::perform(Chat::fetch(chat), Message::ChatFetched))
             }
-            Message::ChatFetched(Ok(chat)) => match &mut self.state {
-                State::Booting { file, .. } if file == &chat.file => {
-                    self.id = Some(chat.id);
-                    self.title = chat.title;
-                    self.history = chat.history;
-                    self.input = String::new();
+            Message::ChatFetched(Ok(chat)) | Message::LastChatFetched(Ok(chat)) => {
+                match &mut self.state {
+                    State::Booting { file, .. } if file == &chat.file => {
+                        self.id = Some(chat.id);
+                        self.title = chat.title;
+                        self.history = chat.history;
+                        self.input = String::new();
 
-                    Action::Run(widget::focus_next())
+                        Action::Run(widget::focus_next())
+                    }
+                    State::Running { assistant, sending } if assistant.file() == &chat.file => {
+                        self.id = Some(chat.id);
+                        self.title = chat.title;
+                        self.history = chat.history;
+                        self.input = String::new();
+                        self.error = None;
+
+                        *sending = None;
+
+                        Action::Run(widget::focus_next())
+                    }
+                    _ => {
+                        let (conversation, task) = Self::open(chat, self.backend);
+
+                        *self = conversation;
+
+                        Action::Run(task)
+                    }
                 }
-                State::Running { assistant, sending } if assistant.file() == &chat.file => {
-                    self.id = Some(chat.id);
-                    self.title = chat.title;
-                    self.history = chat.history;
-                    self.input = String::new();
-                    self.error = None;
-
-                    *sending = None;
-
-                    Action::Run(widget::focus_next())
-                }
-                _ => {
-                    let (conversation, task) = Self::open(chat, self.backend);
-
-                    *self = conversation;
-
-                    Action::Run(task)
-                }
-            },
+            }
             Message::ChatFetched(Err(error)) => {
                 self.error = Some(dbg!(error));
 
                 Action::None
             }
-            Message::New => {
+            Message::New | Message::LastChatFetched(Err(_)) => {
                 self.id = None;
                 self.title = None;
                 self.history = Vec::new();
@@ -323,7 +326,7 @@ impl Conversation {
                 if let Some(id) = self.id.clone() {
                     Action::Run(Task::future(Chat::delete(id)).and_then(|_| {
                         Task::batch([
-                            Task::perform(Chat::fetch_last_opened(), Message::ChatFetched),
+                            Task::perform(Chat::fetch_last_opened(), Message::LastChatFetched),
                             Task::perform(Chat::list(), Message::ChatsListed),
                         ])
                     }))
