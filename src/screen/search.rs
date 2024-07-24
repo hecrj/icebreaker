@@ -106,7 +106,7 @@ impl Search {
             }
             Message::RunModel(model) => Action::Boot(model),
             Message::LinkPressed(link) => {
-                let _ = open::that(match link {
+                let _ = open::that_in_background(match link {
                     Link::Rust => "https://rust-lang.org",
                     Link::Iced => "https://iced.rs",
                     Link::HuggingFace => "https://huggingface.co",

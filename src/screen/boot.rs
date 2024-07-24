@@ -22,6 +22,7 @@ pub enum Message {
     Boot,
     Abort,
     UseCUDAToggled(bool),
+    LinkClicked(markdown::Url),
 }
 
 pub enum Action {
@@ -95,6 +96,11 @@ impl Boot {
 
                 Action::None
             }
+            Message::LinkClicked(url) => {
+                let _ = open::that_in_background(url.to_string());
+
+                Action::None
+            }
         }
     }
 
@@ -149,10 +155,12 @@ impl Boot {
             ])
             .into()
         } else {
-            scrollable(markdown(&self.readme))
-                .spacing(10)
-                .height(Fill)
-                .into()
+            scrollable(
+                markdown(&self.readme, markdown::Settings::default()).map(Message::LinkClicked),
+            )
+            .spacing(10)
+            .height(Fill)
+            .into()
         };
 
         center(
