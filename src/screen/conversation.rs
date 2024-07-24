@@ -11,7 +11,7 @@ use iced::task::{self, Task};
 use iced::time::{self, Duration, Instant};
 use iced::widget::{
     self, button, center, column, container, horizontal_space, hover, progress_bar, row,
-    scrollable, stack, text, text_input, tooltip, value,
+    scrollable, stack, text, text_editor, tooltip, value,
 };
 use iced::{Center, Element, Fill, Font, Left, Right, Subscription, Theme};
 
@@ -22,7 +22,7 @@ pub struct Conversation {
     id: Option<Id>,
     title: Option<String>,
     history: Vec<assistant::Message>,
-    input: String,
+    input: text_editor::Content,
     error: Option<Error>,
     sidebar_open: bool,
 }
@@ -47,8 +47,7 @@ pub enum Message {
     ChatsListed(Result<Vec<Entry>, Error>),
     Booting(Result<BootEvent, Error>),
     Tick(Instant),
-    InputChanged(String),
-    InputSubmitted,
+    InputChanged(text_editor::Action),
     Chatting(Result<chat::Event, Error>),
     Copy(assistant::Message),
     Created(Result<Chat, Error>),
@@ -87,7 +86,7 @@ impl Conversation {
                 id: None,
                 title: None,
                 history: Vec::new(),
-                input: String::new(),
+                input: text_editor::Content::new(),
                 error: None,
                 chats: Vec::new(),
                 sidebar_open: true,
@@ -173,27 +172,29 @@ impl Conversation {
 
                 Action::None
             }
-            Message::InputChanged(input) => {
-                self.input = input;
-                self.error = None;
+            Message::InputChanged(action) => match action {
+                text_editor::Action::Edit(text_editor::Edit::Enter) => {
+                    if let State::Running { assistant, sending } = &mut self.state {
+                        let (send, handle) = Task::run(
+                            chat::send(assistant, &self.history, &self.input.text()),
+                            Message::Chatting,
+                        )
+                        .abortable();
 
-                Action::None
-            }
-            Message::InputSubmitted => {
-                if let State::Running { assistant, sending } = &mut self.state {
-                    let (send, handle) = Task::run(
-                        chat::send(assistant, &self.history, &self.input),
-                        Message::Chatting,
-                    )
-                    .abortable();
+                        *sending = Some(handle.abort_on_drop());
 
-                    *sending = Some(handle.abort_on_drop());
+                        Action::Run(send)
+                    } else {
+                        Action::None
+                    }
+                }
+                _ => {
+                    self.input.perform(action);
+                    self.error = None;
 
-                    Action::Run(send)
-                } else {
                     Action::None
                 }
-            }
+            },
             Message::Chatting(Ok(event)) if !self.can_send() => match event {
                 chat::Event::TitleChanged(title) => {
                     self.title = Some(title);
@@ -202,7 +203,7 @@ impl Conversation {
                 }
                 chat::Event::MessageSent(message) => {
                     self.history.push(message);
-                    self.input = String::new();
+                    self.input = text_editor::Content::new();
 
                     Action::None
                 }
@@ -280,7 +281,7 @@ impl Conversation {
                         self.id = Some(chat.id);
                         self.title = chat.title;
                         self.history = chat.history;
-                        self.input = String::new();
+                        self.input = text_editor::Content::new();
 
                         Action::Run(widget::focus_next())
                     }
@@ -288,7 +289,7 @@ impl Conversation {
                         self.id = Some(chat.id);
                         self.title = chat.title;
                         self.history = chat.history;
-                        self.input = String::new();
+                        self.input = text_editor::Content::new();
                         self.error = None;
 
                         *sending = None;
@@ -313,7 +314,7 @@ impl Conversation {
                 self.id = None;
                 self.title = None;
                 self.history = Vec::new();
-                self.input = String::new();
+                self.input = text_editor::Content::new();
                 self.error = None;
 
                 if let State::Running { sending, .. } = &mut self.state {
@@ -355,12 +356,10 @@ impl Conversation {
                 ]
                 .spacing(5)
                 .align_x(Center)
-                .width(Fill)
                 .into(),
                 None => text(self.model_name())
                     .font(Font::MONOSPACE)
                     .size(20)
-                    .width(Fill)
                     .align_x(Center)
                     .into(),
             };
@@ -395,7 +394,15 @@ impl Conversation {
                 horizontal_space().into()
             };
 
-            let bar = stack![title, row![toggle_sidebar, horizontal_space(), delete]].into();
+            let bar = row![
+                toggle_sidebar,
+                horizontal_space(),
+                title,
+                horizontal_space(),
+                delete
+            ]
+            .spacing(10)
+            .into();
 
             match &self.state {
                 State::Booting {
@@ -499,17 +506,10 @@ impl Conversation {
             .into()
         };
 
-        let input = {
-            let editor = text_input("Type your message here...", &self.input)
-                .on_input(Message::InputChanged)
-                .padding(10);
-
-            if self.can_send() {
-                editor.on_submit(Message::InputSubmitted)
-            } else {
-                editor
-            }
-        };
+        let input = text_editor(&self.input)
+            .placeholder("Type your message here...")
+            .on_action(Message::InputChanged)
+            .padding(10);
 
         let chat = column![header, messages, input].spacing(10).align_x(Center);
 
