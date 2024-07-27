@@ -48,6 +48,7 @@ pub enum Message {
     Booting(Result<BootEvent, Error>),
     Tick(Instant),
     InputChanged(text_editor::Action),
+    Submit,
     Chatting(Result<chat::Event, Error>),
     Copy(assistant::Message),
     Created(Result<Chat, Error>),
@@ -172,11 +173,17 @@ impl Conversation {
 
                 Action::None
             }
-            Message::InputChanged(action) => match action {
-                text_editor::Action::Edit(text_editor::Edit::Enter) => {
-                    if let State::Running { assistant, sending } = &mut self.state {
+            Message::InputChanged(action) => {
+                self.input.perform(action);
+                self.error = None;
+
+                Action::None
+            }
+            Message::Submit => {
+                if let State::Running { assistant, sending } = &mut self.state {
+                    if let Some(message) = chat::Content::parse(&self.input.text()) {
                         let (send, handle) = Task::run(
-                            chat::send(assistant, &self.history, &self.input.text()),
+                            chat::send(assistant, &self.history, message),
                             Message::Chatting,
                         )
                         .abortable();
@@ -187,14 +194,10 @@ impl Conversation {
                     } else {
                         Action::None
                     }
-                }
-                _ => {
-                    self.input.perform(action);
-                    self.error = None;
-
+                } else {
                     Action::None
                 }
-            },
+            }
             Message::Chatting(Ok(event)) if !self.can_send() => match event {
                 chat::Event::TitleChanged(title) => {
                     self.title = Some(title);
@@ -509,7 +512,17 @@ impl Conversation {
         let input = text_editor(&self.input)
             .placeholder("Type your message here...")
             .on_action(Message::InputChanged)
-            .padding(10);
+            .padding(10)
+            .key_binding(|key_press| {
+                let modifiers = key_press.modifiers;
+
+                match text_editor::Binding::from_key_press(key_press) {
+                    Some(text_editor::Binding::Enter) if !modifiers.shift() => {
+                        Some(text_editor::Binding::Custom(Message::Submit))
+                    }
+                    binding => binding,
+                }
+            });
 
         let chat = column![header, messages, input].spacing(10).align_x(Center);
 

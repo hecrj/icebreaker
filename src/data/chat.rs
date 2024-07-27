@@ -135,16 +135,35 @@ pub enum Event {
     TitleChanged(String),
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Content(String);
+
+impl Content {
+    pub fn parse(content: &str) -> Option<Self> {
+        let content = content.trim();
+
+        if content.is_empty() {
+            return None;
+        }
+
+        Some(Self(content.to_owned()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 pub fn send(
     assistant: &Assistant,
-    history: &[assistant::Message],
-    message: &str,
+    history: &[Message],
+    message: Content,
 ) -> impl Stream<Item = Result<Event, Error>> {
     const SYSTEM_PROMPT: &str = "You are a helpful assistant.";
 
     let assistant = assistant.clone();
     let mut messages = history.to_vec();
-    let message = message.to_owned();
+    let message = message.as_str().to_owned();
 
     iced::stream::try_channel(1, |mut sender| async move {
         messages.push(Message::User(message.clone()));
