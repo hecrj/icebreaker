@@ -306,19 +306,21 @@ impl Assistant {
                 )
             };
 
-            while let Some(log) = lines.next().await.transpose()? {
-                if log.contains("HTTP server listening") {
-                    sender
-                        .finish(Assistant {
-                            file,
-                            _server: Arc::new(server),
-                        })
-                        .await;
+            while let Some(line) = lines.next().await {
+                if let Ok(log) = line {
+                    if log.contains("HTTP server listening") {
+                        sender
+                            .finish(Assistant {
+                                file,
+                                _server: Arc::new(server),
+                            })
+                            .await;
 
-                    return Ok(());
+                        return Ok(());
+                    }
+
+                    sender.log(log).await;
                 }
-
-                sender.log(log).await;
             }
 
             Err(Error::ExecutorFailed("llama-server exited unexpectedly"))
