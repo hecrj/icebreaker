@@ -81,16 +81,16 @@ impl Chat {
         title: Option<String>,
         history: Vec<Message>,
     ) -> Result<Self, Error> {
-        let current = Self::fetch(id.clone()).await?;
+        if let Ok(current) = Self::fetch(id.clone()).await {
+            if current.title != title {
+                let mut list = List::fetch().await?;
 
-        if current.title != title {
-            let mut list = List::fetch().await?;
+                if let Some(entry) = list.entries.iter_mut().find(|entry| entry.id == id) {
+                    entry.title = title.clone();
+                }
 
-            if let Some(entry) = list.entries.iter_mut().find(|entry| entry.id == id) {
-                entry.title = title.clone();
+                list.save().await?;
             }
-
-            list.save().await?;
         }
 
         let chat = Schema {
