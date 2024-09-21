@@ -49,11 +49,9 @@ impl Boot {
             Task::future(model.fetch_readme())
                 .and_then(|readme| {
                     Task::future(async move {
-                        tokio::task::spawn_blocking(move || {
-                            markdown::parse(&readme, Theme::TokyoNight.palette()).collect()
-                        })
-                        .await
-                        .unwrap_or_default()
+                        tokio::task::spawn_blocking(move || markdown::parse(&readme).collect())
+                            .await
+                            .unwrap_or_default()
                     })
                 })
                 .map(Message::ReadmeFetched),
@@ -104,16 +102,14 @@ impl Boot {
         }
     }
 
-    pub fn view(&self) -> Element<Message> {
+    pub fn view(&self, theme: Theme) -> Element<Message> {
         let title = text(self.model.name()).size(20).font(Font::MONOSPACE);
 
         let boot = {
             let use_cuda = {
-                let toggle = toggler(
-                    Some("Use CUDA".to_owned()),
-                    self.use_cuda,
-                    Message::UseCUDAToggled,
-                );
+                let toggle = toggler(self.use_cuda)
+                    .label("Use CUDA")
+                    .on_toggle(Message::UseCUDAToggled);
 
                 tip(
                     toggle,
@@ -156,7 +152,12 @@ impl Boot {
             .into()
         } else {
             scrollable(
-                markdown(&self.readme, markdown::Settings::default()).map(Message::LinkClicked),
+                markdown(
+                    &self.readme,
+                    markdown::Settings::default(),
+                    markdown::Style::from_palette(theme.palette()),
+                )
+                .map(Message::LinkClicked),
             )
             .spacing(10)
             .height(Fill)

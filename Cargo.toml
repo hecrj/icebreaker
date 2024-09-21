@@ -6,8 +6,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
-iced.git = "https://github.com/iced-rs/iced.git"
-iced.rev = "6734d183594ebf89b8e6c030ea69d53ecb6b72db"
+iced.version = "0.13"
 iced.features = ["tokio", "svg", "markdown", "highlighter", "system", "web-colors", "debug"]
 
 tokio.version = "1.38"
