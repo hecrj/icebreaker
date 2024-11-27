@@ -308,7 +308,7 @@ impl Assistant {
 
             while let Some(line) = lines.next().await {
                 if let Ok(log) = line {
-                    if log.contains("server is listening") {
+                    if log.contains("starting the main loop") {
                         sender
                             .finish(Assistant {
                                 file,
