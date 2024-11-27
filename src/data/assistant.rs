@@ -214,7 +214,7 @@ impl Assistant {
                     Backend::Cpu => {
                         format!(
                             "create --rm -p {port}:80 -v {volume}:/models \
-                            {container} --model models/{filename} --conversation \
+                            {container} --model models/{filename} \
                             --port 80 --host 0.0.0.0",
                             filename = file.name,
                             container = Self::LLAMA_CPP_CONTAINER_CPU,
@@ -225,7 +225,7 @@ impl Assistant {
                     Backend::Cuda => {
                         format!(
                             "create --rm --gpus all -p {port}:80 -v {volume}:/models \
-                            {container} --model models/{filename} --conversation \
+                            {container} --model models/{filename} \
                             --port 80 --host 0.0.0.0 --gpu-layers 40",
                             filename = file.name,
                             container = Self::LLAMA_CPP_CONTAINER_CUDA,
@@ -308,7 +308,7 @@ impl Assistant {
 
             while let Some(line) = lines.next().await {
                 if let Ok(log) = line {
-                    if log.contains("HTTP server listening") {
+                    if log.contains("server is listening") {
                         sender
                             .finish(Assistant {
                                 file,
@@ -396,6 +396,10 @@ impl Assistant {
                             content: Option<String>,
                         }
 
+                        if data == "data: [DONE]" {
+                            break;
+                        }
+
                         let data: Data = serde_json::from_str(
                             data.trim().strip_prefix("data: ").unwrap_or(data),
                         )?;
@@ -435,7 +439,7 @@ impl Assistant {
 
         let server = process::Command::new(executable)
             .args(Self::parse_args(&format!(
-                "--model models/{filename} --conversation \
+                "--model models/{filename} \
                     --port 8080 --host 0.0.0.0 {gpu_flags}",
                 filename = file.name,
             )))
