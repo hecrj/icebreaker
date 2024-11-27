@@ -22,9 +22,9 @@ No pre-built binaries yet! Use `cargo` to try it out:
 cargo install --git https://github.com/hecrj/icebreaker.git
 ```
 
-You also need either [`llama.cpp`] or [Docker] installed, for now.
+You also need either [`llama.cpp@9f91251`] or [Docker] installed, for now.
 
-[`llama.cpp`]: https://github.com/ggerganov/llama.cpp
+[`llama.cpp@9f91251`]: https://github.com/ggerganov/llama.cpp/tree/9f912511bc9414fa7a3c521378b6388cd932b58d
 [Docker]: https://www.docker.com/
 
 
