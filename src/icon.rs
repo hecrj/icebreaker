@@ -1,46 +1,47 @@
+// Generated automatically by iced_fontello at build time.
+// Do not edit manually.
+// f784a95f14b86b034e2cc96471e57ab257228d9ae0e188b24a0c3462f53121fd
 use iced::widget::{text, Text};
 use iced::Font;
 
-pub const FONT_BYTES: &[u8] = include_bytes!("../fonts/icebreaker-icons.ttf");
-
-pub fn download<'a>() -> Text<'a> {
-    with_codepoint('\u{E800}')
-}
-
-pub fn heart<'a>() -> Text<'a> {
-    with_codepoint('\u{E801}')
-}
-
-pub fn clock<'a>() -> Text<'a> {
-    with_codepoint('\u{E802}')
-}
-
-pub fn user<'a>() -> Text<'a> {
-    with_codepoint('\u{E803}')
-}
+pub const FONT: &[u8] = include_bytes!("../fonts/icebreaker-icons.ttf");
 
 pub fn chat<'a>() -> Text<'a> {
-    with_codepoint('\u{E804}')
+    icon("\u{E720}")
 }
 
 pub fn clipboard<'a>() -> Text<'a> {
-    with_codepoint('\u{E805}')
+    icon("\u{1F4CB}")
+}
+
+pub fn clock<'a>() -> Text<'a> {
+    icon("\u{1F554}")
 }
 
 pub fn collapse<'a>() -> Text<'a> {
-    with_codepoint('\u{E806}')
+    icon("\u{F191}")
+}
+
+pub fn download<'a>() -> Text<'a> {
+    icon("\u{1F4E5}")
 }
 
 pub fn expand<'a>() -> Text<'a> {
-    with_codepoint('\u{E807}')
+    icon("\u{F152}")
+}
+
+pub fn heart<'a>() -> Text<'a> {
+    icon("\u{2665}")
 }
 
 pub fn trash<'a>() -> Text<'a> {
-    with_codepoint('\u{E808}')
+    icon("\u{F1F8}")
 }
 
-fn with_codepoint<'a>(codepoint: char) -> Text<'a> {
-    const FONT: Font = Font::with_name("icebreaker-icons");
+pub fn user<'a>() -> Text<'a> {
+    icon("\u{1F464}")
+}
 
-    text(codepoint).font(FONT)
+fn icon<'a>(codepoint: &'a str) -> Text<'a> {
+    text(codepoint).font(Font::with_name("icebreaker-icons"))
 }

@@ -1,0 +1,12 @@
+module = "icon"
+
+[glyphs]
+chat = "entypo-chat"
+clipboard = "entypo-clipboard"
+clock = "fontawesome-clock"
+collapse = "fontawesome-collapse-left"
+expand = "fontawesome-expand-right"
+download = "fontawesome-download"
+heart = "entypo-heart"
+trash = "fontawesome-trash"
+user = "iconic-user"

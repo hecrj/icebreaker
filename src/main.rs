@@ -17,7 +17,7 @@ use iced::{Element, Subscription, Task, Theme};
 
 pub fn main() -> iced::Result {
     iced::application(Icebreaker::title, Icebreaker::update, Icebreaker::view)
-        .font(icon::FONT_BYTES)
+        .font(icon::FONT)
         .subscription(Icebreaker::subscription)
         .theme(Icebreaker::theme)
         .run_with(Icebreaker::new)

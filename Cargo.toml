@@ -35,3 +35,6 @@ itertools = "0.13"
 open = "5.2"
 serde_json = "1.0"
 thiserror = "1.0"
+
+[build-dependencies]
+iced_fontello = "0.13"
