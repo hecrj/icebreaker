@@ -614,7 +614,7 @@ fn message_bubble(message: &assistant::Message) -> Element<Message> {
     use iced::border;
 
     let bubble = container(
-        container(text(message.content()))
+        container(text(message.content()).shaping(text::Shaping::Advanced))
             .width(Fill)
             .style(move |theme: &Theme| {
                 let palette = theme.extended_palette();
