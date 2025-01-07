@@ -19,9 +19,8 @@ pub struct Assistant {
 }
 
 impl Assistant {
-    const LLAMA_CPP_CONTAINER_CPU: &'static str = "ghcr.io/ggerganov/llama.cpp:server--b1-a59f8fd";
-    const LLAMA_CPP_CONTAINER_CUDA: &'static str =
-        "ghcr.io/ggerganov/llama.cpp:server-cuda--b1-a59f8fd";
+    const LLAMA_CPP_CONTAINER_CPU: &'static str = "ghcr.io/ggerganov/llama.cpp:server-b4431";
+    const LLAMA_CPP_CONTAINER_CUDA: &'static str = "ghcr.io/ggerganov/llama.cpp:server-cuda-b4431";
 
     const MODELS_DIR: &'static str = "./models";
     const HOST_PORT: u64 = 8080;
@@ -214,7 +213,7 @@ impl Assistant {
                     Backend::Cpu => {
                         format!(
                             "create --rm -p {port}:80 -v {volume}:/models \
-                            {container} --model models/{filename} \
+                            {container} --model /models/{filename} \
                             --port 80 --host 0.0.0.0",
                             filename = file.name,
                             container = Self::LLAMA_CPP_CONTAINER_CPU,
@@ -225,7 +224,7 @@ impl Assistant {
                     Backend::Cuda => {
                         format!(
                             "create --rm --gpus all -p {port}:80 -v {volume}:/models \
-                            {container} --model models/{filename} \
+                            {container} --model /models/{filename} \
                             --port 80 --host 0.0.0.0 --gpu-layers 40",
                             filename = file.name,
                             container = Self::LLAMA_CPP_CONTAINER_CUDA,
