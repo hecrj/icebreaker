@@ -1,7 +1,7 @@
 use crate::data::Error;
 
 use futures::channel::mpsc;
-use futures::{SinkExt, Stream, StreamExt};
+use futures::{FutureExt, SinkExt, Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::fs;
@@ -10,7 +10,7 @@ use tokio::process;
 
 use std::fmt;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone)]
 pub struct Assistant {
@@ -306,21 +306,52 @@ impl Assistant {
                 )
             };
 
-            while let Some(line) = lines.next().await {
-                if let Ok(log) = line {
-                    if log.contains("starting the main loop") {
-                        sender
-                            .finish(Assistant {
-                                file,
-                                _server: Arc::new(server),
-                            })
-                            .await;
+            let log_output = {
+                let mut sender = sender.clone();
 
-                        return Ok(());
+                async move {
+                    while let Some(line) = lines.next().await {
+                        if let Ok(log) = line {
+                            sender.log(log).await;
+                        }
                     }
 
-                    sender.log(log).await;
+                    return false;
                 }
+                .boxed()
+            };
+
+            let check_health = async move {
+                loop {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+
+                    if let Ok(response) = reqwest::get(format!(
+                        "http://localhost:{port}/health",
+                        port = Self::HOST_PORT
+                    ))
+                    .await
+                    {
+                        if response.error_for_status().is_ok() {
+                            return true;
+                        }
+                    }
+                }
+            }
+            .boxed();
+
+            if futures::future::select(log_output, check_health)
+                .await
+                .factor_first()
+                .0
+            {
+                sender
+                    .finish(Assistant {
+                        file,
+                        _server: Arc::new(server),
+                    })
+                    .await;
+
+                return Ok(());
             }
 
             Err(Error::ExecutorFailed("llama-server exited unexpectedly"))
