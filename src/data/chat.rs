@@ -1,4 +1,7 @@
+mod schema;
+
 use crate::data::assistant::{self, Assistant, Message};
+use crate::data::chat::schema::Schema;
 use crate::data::Error;
 
 use futures::{SinkExt, Stream, StreamExt};
@@ -9,17 +12,10 @@ use uuid::Uuid;
 
 use std::io;
 use std::path::PathBuf;
+use std::time::Instant;
 
 #[derive(Debug, Clone)]
 pub struct Chat {
-    pub id: Id,
-    pub file: assistant::File,
-    pub title: Option<String>,
-    pub history: Vec<Message>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Schema {
     pub id: Id,
     pub file: assistant::File,
     pub title: Option<String>,
@@ -45,7 +41,7 @@ impl Chat {
             id,
             file: schema.file,
             title: schema.title,
-            history: schema.history,
+            history: schema.history.into_iter().map(Message::from).collect(),
         })
     }
 
@@ -97,7 +93,7 @@ impl Chat {
             id,
             file,
             title,
-            history,
+            history: history.iter().cloned().map(schema::Message::from).collect(),
         };
 
         let (bytes, chat) =
@@ -109,7 +105,7 @@ impl Chat {
             id: chat.id,
             file: chat.file,
             title: chat.title,
-            history: chat.history,
+            history,
         })
     }
 
@@ -168,7 +164,7 @@ impl Content {
 
 pub fn send(
     assistant: &Assistant,
-    history: &[Message],
+    history: Vec<Message>,
     message: Content,
 ) -> impl Stream<Item = Result<Event, Error>> {
     const SYSTEM_PROMPT: &str = "You are a helpful assistant.";
@@ -184,18 +180,34 @@ pub fn send(
             .send(Event::MessageSent(Message::User(message)))
             .await;
 
-        let _ = sender
-            .send(Event::MessageAdded(Message::Assistant(String::new())))
-            .await;
+        let mut reasoning = String::new();
+        let mut reasoning_started_at = None;
+        let mut content = String::new();
 
-        let mut message = String::new();
+        let _ = sender
+            .send(Event::MessageAdded(Message::Assistant {
+                reasoning: None,
+                content: content.clone(),
+            }))
+            .await;
 
         {
             let mut next_message = assistant.complete(SYSTEM_PROMPT, &messages).boxed();
             let mut first = false;
 
-            while let Some(token) = next_message.next().await.transpose()? {
-                message.push_str(&token);
+            while let Some((mode, token)) = next_message.next().await.transpose()? {
+                match mode {
+                    assistant::Mode::Reasoning => {
+                        reasoning.push_str(&token);
+
+                        if reasoning_started_at.is_none() {
+                            reasoning_started_at = Some(Instant::now());
+                        }
+                    }
+                    assistant::Mode::Talking => {
+                        content.push_str(&token);
+                    }
+                }
 
                 let event = if first {
                     first = false;
@@ -205,16 +217,29 @@ pub fn send(
                 };
 
                 let _ = sender
-                    .send(event(Message::Assistant(message.trim().to_owned())))
+                    .send(event(Message::Assistant {
+                        reasoning: if let Some(started_at) = reasoning_started_at {
+                            Some(assistant::Reasoning {
+                                content: reasoning.trim().to_owned(),
+                                duration: started_at.elapsed(),
+                            })
+                        } else {
+                            None
+                        },
+                        content: content.trim().to_owned(),
+                    }))
                     .await;
             }
         }
 
         // Suggest a title after the 1st and 5th messages
         if messages.len() == 1 || messages.len() == 5 {
-            messages.push(Message::Assistant(message.trim().to_owned()));
+            messages.push(Message::Assistant {
+                reasoning: None,
+                content: content.trim().to_owned(),
+            });
             messages.push(Message::User(
-                "Give me a short title for our conversation so far. \
+                "Give me a short title for our conversation so far, without considering this interaction. \
                     Just the title between quotes; don't say anything else."
                     .to_owned(),
             ));
@@ -222,7 +247,11 @@ pub fn send(
             let mut title_suggestion = assistant.complete(SYSTEM_PROMPT, &messages).boxed();
             let mut title = String::new();
 
-            while let Some(token) = title_suggestion.next().await.transpose()? {
+            while let Some((mode, token)) = title_suggestion.next().await.transpose()? {
+                if mode == assistant::Mode::Reasoning {
+                    continue;
+                }
+
                 title.push_str(&token);
 
                 if title.len() > 80 {

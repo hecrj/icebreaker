@@ -8,7 +8,8 @@ license = "MIT"
 repository = "https://github.com/hecrj/icebreaker"
 
 [dependencies]
-iced.version = "0.13"
+iced.git = "https://github.com/hecrj/iced.git"
+iced.rev = "30ee9d024d00403f2fc0571946fa9ca398117e05"
 iced.features = ["tokio", "svg", "markdown", "highlighter", "system", "web-colors", "debug"]
 
 tokio.version = "1.38"

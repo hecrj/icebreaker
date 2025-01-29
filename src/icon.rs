@@ -1,10 +1,18 @@
 // Generated automatically by iced_fontello at build time.
 // Do not edit manually.
-// f784a95f14b86b034e2cc96471e57ab257228d9ae0e188b24a0c3462f53121fd
+// c503e19c014d4088df18af7446d35fed138cb328d6de87dbea1b9266a571c40c
 use iced::widget::{text, Text};
 use iced::Font;
 
 pub const FONT: &[u8] = include_bytes!("../fonts/icebreaker-icons.ttf");
+
+pub fn arrow_down<'a>() -> Text<'a> {
+    icon("\u{E75C}")
+}
+
+pub fn arrow_up<'a>() -> Text<'a> {
+    icon("\u{E75F}")
+}
 
 pub fn chat<'a>() -> Text<'a> {
     icon("\u{E720}")

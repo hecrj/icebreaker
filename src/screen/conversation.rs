@@ -10,10 +10,10 @@ use iced::padding;
 use iced::task::{self, Task};
 use iced::time::{self, Duration, Instant};
 use iced::widget::{
-    self, button, center, column, container, horizontal_space, hover, progress_bar, row,
-    scrollable, stack, text, text_editor, tooltip, value,
+    self, button, center, center_x, column, container, horizontal_space, hover, progress_bar,
+    right, right_center, row, scrollable, stack, text, text_editor, tooltip, value, vertical_rule,
 };
-use iced::{Center, Element, Fill, Font, Left, Right, Subscription, Theme};
+use iced::{Center, Element, Fill, Font, Left, Right, Shrink, Subscription, Theme};
 
 pub struct Conversation {
     backend: Backend,
@@ -21,7 +21,7 @@ pub struct Conversation {
     state: State,
     id: Option<Id>,
     title: Option<String>,
-    history: Vec<assistant::Message>,
+    history: History,
     input: text_editor::Content,
     error: Option<Error>,
     sidebar_open: bool,
@@ -50,7 +50,8 @@ pub enum Message {
     InputChanged(text_editor::Action),
     Submit,
     Chatting(Result<chat::Event, Error>),
-    Copy(assistant::Message),
+    Copy(Item),
+    ToggleReasoning(usize),
     Created(Result<Chat, Error>),
     Saved(Result<Chat, Error>),
     Open(chat::Id),
@@ -86,7 +87,7 @@ impl Conversation {
                 },
                 id: None,
                 title: None,
-                history: Vec::new(),
+                history: History::new(),
                 input: text_editor::Content::new(),
                 error: None,
                 chats: Vec::new(),
@@ -107,10 +108,13 @@ impl Conversation {
             Self {
                 id: Some(chat.id),
                 title: chat.title,
-                history: chat.history,
+                history: History::restore(chat.history),
                 ..conversation
             },
-            task,
+            Task::batch([
+                task,
+                scrollable::snap_to(scrollable::Id::new("chat"), scrollable::RelativeOffset::END),
+            ]),
         )
     }
 
@@ -183,14 +187,20 @@ impl Conversation {
                 if let State::Running { assistant, sending } = &mut self.state {
                     if let Some(message) = chat::Content::parse(&self.input.text()) {
                         let (send, handle) = Task::run(
-                            chat::send(assistant, &self.history, message),
+                            chat::send(assistant, self.history.messages().collect(), message),
                             Message::Chatting,
                         )
                         .abortable();
 
                         *sending = Some(handle.abort_on_drop());
 
-                        Action::Run(send)
+                        Action::Run(Task::batch([
+                            send,
+                            scrollable::snap_to(
+                                scrollable::Id::new("chat"),
+                                scrollable::RelativeOffset { x: 0.0, y: 1.0 },
+                            ),
+                        ]))
                     } else {
                         Action::None
                     }
@@ -216,9 +226,7 @@ impl Conversation {
                     Action::None
                 }
                 chat::Event::LastMessageChanged(new_message) => {
-                    if let Some(message) = self.history.last_mut() {
-                        *message = new_message;
-                    }
+                    self.history.replace_last(new_message);
 
                     Action::None
                 }
@@ -229,13 +237,15 @@ impl Conversation {
                     {
                         *sending = None;
 
+                        let messages = self.history.messages().collect();
+
                         if let Some(id) = &self.id {
                             Action::Run(Task::perform(
                                 Chat::save(
                                     id.clone(),
                                     assistant.file().clone(),
                                     self.title.clone(),
-                                    self.history.clone(),
+                                    messages,
                                 ),
                                 Message::Saved,
                             ))
@@ -244,7 +254,7 @@ impl Conversation {
                                 Chat::create(
                                     assistant.file().clone(),
                                     self.title.clone(),
-                                    self.history.clone(),
+                                    messages,
                                 ),
                                 Message::Created,
                             ))
@@ -264,7 +274,14 @@ impl Conversation {
 
                 Action::None
             }
-            Message::Copy(message) => Action::Run(clipboard::write(message.content().to_owned())),
+            Message::Copy(message) => Action::Run(clipboard::write(message.into_text())),
+            Message::ToggleReasoning(index) => {
+                if let Some(Item::Assistant { show_reasoning, .. }) = self.history.get_mut(index) {
+                    *show_reasoning = !*show_reasoning;
+                }
+
+                Action::None
+            }
             Message::Created(Ok(chat)) | Message::Saved(Ok(chat)) => {
                 self.id = Some(chat.id);
 
@@ -283,21 +300,33 @@ impl Conversation {
                     State::Booting { file, .. } if file == &chat.file => {
                         self.id = Some(chat.id);
                         self.title = chat.title;
-                        self.history = chat.history;
+                        self.history = History::restore(chat.history);
                         self.input = text_editor::Content::new();
 
-                        Action::Run(widget::focus_next())
+                        Action::Run(Task::batch([
+                            widget::focus_next(),
+                            scrollable::snap_to(
+                                scrollable::Id::new("chat"),
+                                scrollable::RelativeOffset::END,
+                            ),
+                        ]))
                     }
                     State::Running { assistant, sending } if assistant.file() == &chat.file => {
                         self.id = Some(chat.id);
                         self.title = chat.title;
-                        self.history = chat.history;
+                        self.history = History::restore(chat.history);
                         self.input = text_editor::Content::new();
                         self.error = None;
 
                         *sending = None;
 
-                        Action::Run(widget::focus_next())
+                        Action::Run(Task::batch([
+                            widget::focus_next(),
+                            scrollable::snap_to(
+                                scrollable::Id::new("chat"),
+                                scrollable::RelativeOffset::END,
+                            ),
+                        ]))
                     }
                     _ => {
                         let (conversation, task) = Self::open(chat, self.backend);
@@ -316,7 +345,7 @@ impl Conversation {
             Message::New | Message::LastChatFetched(Err(_)) => {
                 self.id = None;
                 self.title = None;
-                self.history = Vec::new();
+                self.history = History::new();
                 self.input = text_editor::Content::new();
                 self.error = None;
 
@@ -434,8 +463,8 @@ impl Conversation {
                         .size(10);
 
                         let bar = progress_bar(0.0..=100.0, *progress as f32)
-                            .width(200)
-                            .height(30);
+                            .length(200)
+                            .girth(30);
 
                         stack![
                             if self.error.is_none() {
@@ -476,7 +505,7 @@ impl Conversation {
                         tooltip::Position::Bottom,
                     );
 
-                    stack![bar, container(progress).align_right(Fill).align_y(Center)].into()
+                    stack![bar, right_center(container(progress))].into()
                 }
                 State::Running { .. } => bar,
             }
@@ -499,12 +528,19 @@ impl Conversation {
             )
             .into()
         } else {
-            scrollable(
-                column(self.history.iter().map(message_bubble))
-                    .spacing(10)
-                    .padding(padding::right(20)),
-            )
-            .anchor_y(scrollable::Anchor::End)
+            scrollable(center_x(
+                column(
+                    self.history
+                        .items()
+                        .enumerate()
+                        .map(|(i, item)| item.view(i)),
+                )
+                .spacing(40)
+                .padding(20)
+                .max_width(600),
+            ))
+            .id(scrollable::Id::new("chat"))
+            .spacing(10)
             .height(Fill)
             .into()
         };
@@ -533,7 +569,7 @@ impl Conversation {
                         Some(title) => {
                             let title = text(title).font(Font::MONOSPACE);
                             let subtitle =
-                                text(chat.file.model.name()).font(Font::MONOSPACE).size(12);
+                                text(chat.file.model.name()).font(Font::MONOSPACE).size(10);
 
                             column![title, subtitle].spacing(3).into()
                         }
@@ -580,7 +616,7 @@ impl Conversation {
                     .on_press(Message::Search)
                     .style(button::secondary);
 
-                column![scrollable(chats).height(Fill), new, search]
+                column![scrollable(chats).height(Fill).spacing(10), new, search]
                     .width(250)
                     .spacing(10)
             };
@@ -610,55 +646,190 @@ impl Conversation {
     }
 }
 
-fn message_bubble(message: &assistant::Message) -> Element<Message> {
-    use iced::border;
+impl From<assistant::Message> for Item {
+    fn from(message: assistant::Message) -> Self {
+        match message {
+            assistant::Message::Assistant { reasoning, content } => Item::Assistant {
+                reasoning,
+                content,
+                show_reasoning: true,
+            },
+            assistant::Message::User(content) => Item::User(content),
+        }
+    }
+}
 
-    let bubble = container(
-        container(text(message.content()).shaping(text::Shaping::Advanced))
-            .width(Fill)
-            .style(move |theme: &Theme| {
-                let palette = theme.extended_palette();
+impl From<Item> for assistant::Message {
+    fn from(item: Item) -> Self {
+        match item {
+            Item::User(content) => assistant::Message::User(content),
+            Item::Assistant {
+                reasoning, content, ..
+            } => assistant::Message::Assistant { reasoning, content },
+        }
+    }
+}
 
-                let (background, radius) = match message {
-                    assistant::Message::Assistant(_) => {
-                        (palette.background.weak, border::radius(10).top_left(0))
+pub struct History {
+    items: Vec<Item>,
+}
+
+impl History {
+    pub fn new() -> Self {
+        Self { items: Vec::new() }
+    }
+
+    pub fn restore(messages: impl IntoIterator<Item = assistant::Message>) -> Self {
+        Self {
+            items: messages.into_iter().map(Item::from).collect(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+
+    pub fn items(&self) -> impl Iterator<Item = &Item> {
+        self.items.iter()
+    }
+
+    pub fn get_mut(&mut self, index: usize) -> Option<&mut Item> {
+        self.items.get_mut(index)
+    }
+
+    pub fn push(&mut self, item: impl Into<Item>) {
+        self.items.push(item.into());
+    }
+
+    pub fn replace_last(&mut self, item: impl Into<Item>) {
+        if let Some(last) = self.items.last_mut() {
+            *last = item.into();
+        }
+    }
+
+    pub fn messages<'a>(&'a self) -> impl Iterator<Item = assistant::Message> + 'a {
+        self.items.iter().cloned().map(assistant::Message::from)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Item {
+    User(String),
+    Assistant {
+        reasoning: Option<assistant::Reasoning>,
+        content: String,
+        show_reasoning: bool,
+    },
+}
+
+impl Item {
+    pub fn view(&self, index: usize) -> Element<Message> {
+        use iced::border;
+
+        let message: Element<_> = match self {
+            Self::Assistant {
+                reasoning,
+                content,
+                show_reasoning,
+            } => {
+                let reasoning: Element<_> = if let Some(reasoning) = reasoning {
+                    let toggle = button(
+                        row![
+                            text!("Thought for {} seconds", reasoning.duration.as_secs())
+                                .font(Font::MONOSPACE)
+                                .size(12),
+                            if *show_reasoning {
+                                icon::arrow_down()
+                            } else {
+                                icon::arrow_up()
+                            }
+                            .size(12),
+                        ]
+                        .spacing(10),
+                    )
+                    .on_press(Message::ToggleReasoning(index))
+                    .style(button::secondary);
+
+                    let thoughts = row![
+                        vertical_rule(1),
+                        text(&reasoning.content)
+                            .size(12)
+                            .shaping(text::Shaping::Advanced)
+                            .style(|theme: &Theme| {
+                                let palette = theme.extended_palette();
+
+                                text::Style {
+                                    color: Some(palette.secondary.strong.color),
+                                }
+                            })
+                    ]
+                    .spacing(5)
+                    .height(Shrink);
+
+                    if *show_reasoning || content.is_empty() {
+                        column![toggle, thoughts].spacing(10).into()
+                    } else {
+                        toggle.into()
                     }
-                    assistant::Message::User(_) => {
-                        (palette.success.weak, border::radius(10.0).top_right(0))
-                    }
+                } else {
+                    horizontal_space().into()
                 };
 
-                container::Style {
-                    background: Some(background.color.into()),
-                    text_color: Some(background.text),
-                    border: border::rounded(radius),
-                    ..container::Style::default()
+                let content = text(content).shaping(text::Shaping::Advanced);
+
+                column![reasoning, content].spacing(10).into()
+            }
+            Self::User(content) => right(
+                container(text(content).shaping(text::Shaping::Advanced))
+                    .style(|theme: &Theme| {
+                        let palette = theme.extended_palette();
+
+                        container::Style {
+                            background: Some(palette.background.weak.color.into()),
+                            text_color: Some(palette.background.weak.text),
+                            border: border::rounded(10),
+                            ..container::Style::default()
+                        }
+                    })
+                    .padding(10),
+            )
+            .into(),
+        };
+
+        let copy = tip(
+            button(icon::clipboard())
+                .on_press_with(|| Message::Copy(self.clone()))
+                .padding(0)
+                .style(button::text),
+            "Copy to clipboard",
+            tip::Position::Bottom,
+        );
+
+        hover(
+            message,
+            container(copy)
+                .width(Fill)
+                .center_y(Fill)
+                .align_x(match self {
+                    Self::Assistant { .. } => Right,
+                    Self::User(_) => Left,
+                }),
+        )
+    }
+
+    pub fn into_text(self) -> String {
+        match self {
+            Self::User(content) => content,
+            Self::Assistant {
+                reasoning,
+                content,
+                show_reasoning,
+            } => match reasoning {
+                Some(reasoning) if show_reasoning => {
+                    format!("Reasoning:\n{}\n\n{content}", reasoning.content)
                 }
-            })
-            .padding(10),
-    )
-    .padding(match message {
-        assistant::Message::Assistant(_) => padding::right(20),
-        assistant::Message::User(_) => padding::left(20),
-    });
-
-    let copy = tip(
-        button(icon::clipboard())
-            .on_press_with(|| Message::Copy(message.clone()))
-            .padding(0)
-            .style(button::text),
-        "Copy to clipboard",
-        tip::Position::Bottom,
-    );
-
-    hover(
-        bubble,
-        container(copy)
-            .width(Fill)
-            .center_y(Fill)
-            .align_x(match message {
-                assistant::Message::Assistant(_) => Right,
-                assistant::Message::User(_) => Left,
-            }),
-    )
+                _ => content,
+            },
+        }
+    }
 }
