@@ -10,10 +10,11 @@ use iced::padding;
 use iced::task::{self, Task};
 use iced::time::{self, Duration, Instant};
 use iced::widget::{
-    self, button, center, column, container, horizontal_space, hover, progress_bar, row,
-    scrollable, stack, text, text_editor, tooltip, value,
+    self, bottom, bottom_center, button, center, center_x, center_y, column, container,
+    horizontal_space, hover, markdown, progress_bar, right, right_center, row, scrollable, stack,
+    text, text_editor, tooltip, value, vertical_rule, vertical_space, Text,
 };
-use iced::{Center, Element, Fill, Font, Left, Right, Subscription, Theme};
+use iced::{Center, Element, Fill, Font, Rectangle, Shrink, Subscription, Theme};
 
 pub struct Conversation {
     backend: Backend,
@@ -21,8 +22,9 @@ pub struct Conversation {
     state: State,
     id: Option<Id>,
     title: Option<String>,
-    history: Vec<assistant::Message>,
+    history: History,
     input: text_editor::Content,
+    input_height: f32,
     error: Option<Error>,
     sidebar_open: bool,
 }
@@ -48,9 +50,12 @@ pub enum Message {
     Booting(Result<BootEvent, Error>),
     Tick(Instant),
     InputChanged(text_editor::Action),
+    InputMeasured(Option<Rectangle>),
     Submit,
     Chatting(Result<chat::Event, Error>),
-    Copy(assistant::Message),
+    Copy(Item),
+    Regenerate(usize),
+    ToggleReasoning(usize),
     Created(Result<Chat, Error>),
     Saved(Result<Chat, Error>),
     Open(chat::Id),
@@ -60,6 +65,7 @@ pub enum Message {
     New,
     Search,
     ToggleSidebar,
+    LinkClicked(markdown::Url),
 }
 
 pub enum Action {
@@ -86,8 +92,9 @@ impl Conversation {
                 },
                 id: None,
                 title: None,
-                history: Vec::new(),
+                history: History::new(),
                 input: text_editor::Content::new(),
+                input_height: 50.0,
                 error: None,
                 chats: Vec::new(),
                 sidebar_open: true,
@@ -96,6 +103,8 @@ impl Conversation {
                 boot,
                 Task::perform(Chat::list(), Message::ChatsListed),
                 widget::focus_next(),
+                measure_input(),
+                snap_chat_to_end(),
             ]),
         )
     }
@@ -107,7 +116,7 @@ impl Conversation {
             Self {
                 id: Some(chat.id),
                 title: chat.title,
-                history: chat.history,
+                history: History::restore(chat.history),
                 ..conversation
             },
             task,
@@ -115,7 +124,10 @@ impl Conversation {
     }
 
     pub fn title(&self) -> String {
-        format!("{name} - Icebreaker", name = self.model_name())
+        format!(
+            "{name} - Icebreaker",
+            name = self.title.as_deref().unwrap_or(self.model_name())
+        )
     }
 
     pub fn update(&mut self, message: Message) -> Action {
@@ -177,13 +189,20 @@ impl Conversation {
                 self.input.perform(action);
                 self.error = None;
 
+                Action::Run(measure_input())
+            }
+            Message::InputMeasured(bounds) => {
+                if let Some(bounds) = bounds {
+                    self.input_height = bounds.height;
+                }
+
                 Action::None
             }
             Message::Submit => {
                 if let State::Running { assistant, sending } = &mut self.state {
                     if let Some(message) = chat::Content::parse(&self.input.text()) {
                         let (send, handle) = Task::run(
-                            chat::send(assistant, &self.history, message),
+                            chat::send(assistant, self.history.messages().collect(), message),
                             Message::Chatting,
                         )
                         .abortable();
@@ -213,12 +232,10 @@ impl Conversation {
                 chat::Event::MessageAdded(message) => {
                     self.history.push(message);
 
-                    Action::None
+                    Action::Run(snap_chat_to_end())
                 }
                 chat::Event::LastMessageChanged(new_message) => {
-                    if let Some(message) = self.history.last_mut() {
-                        *message = new_message;
-                    }
+                    self.history.replace_last(new_message);
 
                     Action::None
                 }
@@ -229,13 +246,15 @@ impl Conversation {
                     {
                         *sending = None;
 
+                        let messages = self.history.messages().collect();
+
                         if let Some(id) = &self.id {
                             Action::Run(Task::perform(
                                 Chat::save(
                                     id.clone(),
                                     assistant.file().clone(),
                                     self.title.clone(),
-                                    self.history.clone(),
+                                    messages,
                                 ),
                                 Message::Saved,
                             ))
@@ -244,7 +263,7 @@ impl Conversation {
                                 Chat::create(
                                     assistant.file().clone(),
                                     self.title.clone(),
-                                    self.history.clone(),
+                                    messages,
                                 ),
                                 Message::Created,
                             ))
@@ -264,7 +283,31 @@ impl Conversation {
 
                 Action::None
             }
-            Message::Copy(message) => Action::Run(clipboard::write(message.content().to_owned())),
+            Message::Copy(message) => Action::Run(clipboard::write(message.into_text())),
+            Message::Regenerate(index) => {
+                if let State::Running { assistant, sending } = &mut self.state {
+                    self.history.truncate(index);
+
+                    let (send, handle) = Task::run(
+                        chat::complete(assistant, self.history.messages().collect()),
+                        Message::Chatting,
+                    )
+                    .abortable();
+
+                    *sending = Some(handle.abort_on_drop());
+
+                    Action::Run(send)
+                } else {
+                    Action::None
+                }
+            }
+            Message::ToggleReasoning(index) => {
+                if let Some(Item::Assistant { show_reasoning, .. }) = self.history.get_mut(index) {
+                    *show_reasoning = !*show_reasoning;
+                }
+
+                Action::None
+            }
             Message::Created(Ok(chat)) | Message::Saved(Ok(chat)) => {
                 self.id = Some(chat.id);
 
@@ -283,21 +326,25 @@ impl Conversation {
                     State::Booting { file, .. } if file == &chat.file => {
                         self.id = Some(chat.id);
                         self.title = chat.title;
-                        self.history = chat.history;
+                        self.history = History::restore(chat.history);
                         self.input = text_editor::Content::new();
 
-                        Action::Run(widget::focus_next())
+                        Action::Run(Task::batch([
+                            widget::focus_next(),
+                            snap_chat_to_end(),
+                            measure_input(),
+                        ]))
                     }
                     State::Running { assistant, sending } if assistant.file() == &chat.file => {
                         self.id = Some(chat.id);
                         self.title = chat.title;
-                        self.history = chat.history;
+                        self.history = History::restore(chat.history);
                         self.input = text_editor::Content::new();
                         self.error = None;
 
                         *sending = None;
 
-                        Action::Run(widget::focus_next())
+                        Action::Run(Task::batch([widget::focus_next(), snap_chat_to_end()]))
                     }
                     _ => {
                         let (conversation, task) = Self::open(chat, self.backend);
@@ -316,7 +363,7 @@ impl Conversation {
             Message::New | Message::LastChatFetched(Err(_)) => {
                 self.id = None;
                 self.title = None;
-                self.history = Vec::new();
+                self.history = History::new();
                 self.input = text_editor::Content::new();
                 self.error = None;
 
@@ -344,10 +391,15 @@ impl Conversation {
 
                 Action::None
             }
+            Message::LinkClicked(url) => {
+                let _ = open::that_in_background(url.to_string());
+
+                Action::None
+            }
         }
     }
 
-    pub fn view(&self) -> Element<Message> {
+    pub fn view(&self, theme: &Theme) -> Element<Message> {
         let header: Element<_> = {
             let title: Element<_> = match &self.title {
                 Some(title) => column![
@@ -397,14 +449,10 @@ impl Conversation {
                 horizontal_space().into()
             };
 
-            let bar = row![
-                toggle_sidebar,
-                horizontal_space(),
-                title,
-                horizontal_space(),
-                delete
+            let bar = stack![
+                center_x(title).padding([0, 40]),
+                row![toggle_sidebar, horizontal_space(), delete],
             ]
-            .spacing(10)
             .into();
 
             match &self.state {
@@ -434,8 +482,8 @@ impl Conversation {
                         .size(10);
 
                         let bar = progress_bar(0.0..=100.0, *progress as f32)
-                            .width(200)
-                            .height(30);
+                            .length(200)
+                            .girth(30);
 
                         stack![
                             if self.error.is_none() {
@@ -476,7 +524,7 @@ impl Conversation {
                         tooltip::Position::Bottom,
                     );
 
-                    stack![bar, container(progress).align_right(Fill).align_y(Center)].into()
+                    stack![bar, right_center(progress)].into()
                 }
                 State::Running { .. } => bar,
             }
@@ -500,78 +548,52 @@ impl Conversation {
             .into()
         } else {
             scrollable(
-                column(self.history.iter().map(message_bubble))
-                    .spacing(10)
-                    .padding(padding::right(20)),
+                center_x(
+                    column(
+                        self.history
+                            .items()
+                            .enumerate()
+                            .map(|(i, item)| item.view(i, theme)),
+                    )
+                    .padding(20)
+                    .max_width(600),
+                )
+                .padding(padding::bottom(self.input_height)),
             )
-            .anchor_y(scrollable::Anchor::End)
+            .id(CHAT)
+            .spacing(10)
             .height(Fill)
             .into()
         };
 
-        let input = text_editor(&self.input)
-            .placeholder("Type your message here...")
-            .on_action(Message::InputChanged)
-            .padding(10)
-            .key_binding(|key_press| {
-                let modifiers = key_press.modifiers;
+        let input = container(
+            text_editor(&self.input)
+                .placeholder("Type your message here...")
+                .on_action(Message::InputChanged)
+                .padding(10)
+                .min_height(51)
+                .max_height(16.0 * 1.3 * 20.0) // approx. 20 lines with 1.3 line height
+                .key_binding(|key_press| {
+                    let modifiers = key_press.modifiers;
 
-                match text_editor::Binding::from_key_press(key_press) {
-                    Some(text_editor::Binding::Enter) if !modifiers.shift() => {
-                        Some(text_editor::Binding::Custom(Message::Submit))
+                    match text_editor::Binding::from_key_press(key_press) {
+                        Some(text_editor::Binding::Enter) if !modifiers.shift() => {
+                            Some(text_editor::Binding::Custom(Message::Submit))
+                        }
+                        binding => binding,
                     }
-                    binding => binding,
-                }
-            });
+                }),
+        )
+        .width(Shrink)
+        .max_width(600);
 
-        let chat = column![header, messages, input].spacing(10).align_x(Center);
+        let chat = stack![
+            column![header, messages].spacing(10).align_x(Center),
+            bottom_center(container(input).id(INPUT)),
+        ];
 
         if self.sidebar_open {
             let sidebar = {
-                let chats = column(self.chats.iter().map(|chat| {
-                    let card: Element<_> = match &chat.title {
-                        Some(title) => {
-                            let title = text(title).font(Font::MONOSPACE);
-                            let subtitle =
-                                text(chat.file.model.name()).font(Font::MONOSPACE).size(12);
-
-                            column![title, subtitle].spacing(3).into()
-                        }
-                        None => text(chat.file.model.name()).font(Font::MONOSPACE).into(),
-                    };
-
-                    let is_active = Some(&chat.id) == self.id.as_ref();
-
-                    if is_active {
-                        container(card)
-                            .style(|theme: &Theme| {
-                                let pair = theme.extended_palette().secondary.weak;
-
-                                container::Style {
-                                    background: Some(pair.color.into()),
-                                    text_color: Some(pair.text),
-                                    border: border::rounded(2),
-                                    ..container::Style::default()
-                                }
-                            })
-                            .padding(5)
-                            .width(Fill)
-                            .into()
-                    } else {
-                        button(card)
-                            .on_press_with(move || Message::Open(chat.id.clone()))
-                            .padding(5)
-                            .width(Fill)
-                            .style(|theme: &Theme, status: button::Status| match status {
-                                button::Status::Active => button::text(theme, status),
-                                _ => button::secondary(theme, status),
-                            })
-                            .into()
-                    }
-                }))
-                .clip(true)
-                .spacing(10);
-
                 let new = button(text("New Chat").width(Fill).align_x(Center))
                     .on_press(Message::New)
                     .style(button::success);
@@ -580,14 +602,62 @@ impl Conversation {
                     .on_press(Message::Search)
                     .style(button::secondary);
 
-                column![scrollable(chats).height(Fill), new, search]
-                    .width(250)
-                    .spacing(10)
+                if self.chats.is_empty() {
+                    column![vertical_space(), new, search]
+                } else {
+                    let chats = column(self.chats.iter().map(|chat| {
+                        let card: Element<_> = match &chat.title {
+                            Some(title) => {
+                                let title = text(title).font(Font::MONOSPACE);
+                                let subtitle =
+                                    text(chat.file.model.name()).font(Font::MONOSPACE).size(10);
+
+                                column![title, subtitle].spacing(3).into()
+                            }
+                            None => text(chat.file.model.name()).font(Font::MONOSPACE).into(),
+                        };
+
+                        let is_active = Some(&chat.id) == self.id.as_ref();
+
+                        if is_active {
+                            container(card)
+                                .style(|theme: &Theme| {
+                                    let pair = theme.extended_palette().secondary.weak;
+
+                                    container::Style {
+                                        background: Some(pair.color.into()),
+                                        text_color: Some(pair.text),
+                                        border: border::rounded(2),
+                                        ..container::Style::default()
+                                    }
+                                })
+                                .padding(5)
+                                .width(Fill)
+                                .into()
+                        } else {
+                            button(card)
+                                .on_press_with(move || Message::Open(chat.id.clone()))
+                                .padding(5)
+                                .width(Fill)
+                                .style(|theme: &Theme, status: button::Status| match status {
+                                    button::Status::Active => button::text(theme, status),
+                                    _ => button::secondary(theme, status),
+                                })
+                                .into()
+                        }
+                    }))
+                    .clip(true)
+                    .spacing(10);
+
+                    column![scrollable(chats).height(Fill).spacing(10), new, search]
+                }
+                .width(250)
+                .spacing(10)
             };
 
             row![sidebar, chat].spacing(10).padding(10).into()
         } else {
-            chat.padding(10).into()
+            container(chat).padding(10).into()
         }
     }
 
@@ -610,55 +680,245 @@ impl Conversation {
     }
 }
 
-fn message_bubble(message: &assistant::Message) -> Element<Message> {
-    use iced::border;
+impl From<assistant::Message> for Item {
+    fn from(message: assistant::Message) -> Self {
+        match message {
+            assistant::Message::Assistant { reasoning, content } => {
+                let content_markdown = markdown::parse(&content).collect();
 
-    let bubble = container(
-        container(text(message.content()).shaping(text::Shaping::Advanced))
-            .width(Fill)
-            .style(move |theme: &Theme| {
-                let palette = theme.extended_palette();
+                Item::Assistant {
+                    reasoning,
+                    content,
+                    content_markdown,
+                    show_reasoning: true,
+                }
+            }
+            assistant::Message::User(content) => {
+                let markdown = markdown::parse(&content).collect();
 
-                let (background, radius) = match message {
-                    assistant::Message::Assistant(_) => {
-                        (palette.background.weak, border::radius(10).top_left(0))
-                    }
-                    assistant::Message::User(_) => {
-                        (palette.success.weak, border::radius(10.0).top_right(0))
-                    }
+                Item::User { content, markdown }
+            }
+        }
+    }
+}
+
+impl From<Item> for assistant::Message {
+    fn from(item: Item) -> Self {
+        match item {
+            Item::User { content, .. } => assistant::Message::User(content),
+            Item::Assistant {
+                reasoning, content, ..
+            } => assistant::Message::Assistant { reasoning, content },
+        }
+    }
+}
+
+pub struct History {
+    items: Vec<Item>,
+}
+
+impl History {
+    pub fn new() -> Self {
+        Self { items: Vec::new() }
+    }
+
+    pub fn restore(messages: impl IntoIterator<Item = assistant::Message>) -> Self {
+        Self {
+            items: messages.into_iter().map(Item::from).collect(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+
+    pub fn items(&self) -> impl Iterator<Item = &Item> {
+        self.items.iter()
+    }
+
+    pub fn get_mut(&mut self, index: usize) -> Option<&mut Item> {
+        self.items.get_mut(index)
+    }
+
+    pub fn push(&mut self, item: impl Into<Item>) {
+        self.items.push(item.into());
+    }
+
+    pub fn replace_last(&mut self, item: impl Into<Item>) {
+        if let Some(last) = self.items.last_mut() {
+            *last = item.into();
+        }
+    }
+
+    pub fn truncate(&mut self, amount: usize) {
+        self.items.truncate(amount);
+    }
+
+    pub fn messages<'a>(&'a self) -> impl Iterator<Item = assistant::Message> + 'a {
+        self.items.iter().cloned().map(assistant::Message::from)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Item {
+    User {
+        content: String,
+        markdown: Vec<markdown::Item>,
+    },
+    Assistant {
+        reasoning: Option<assistant::Reasoning>,
+        content: String,
+        content_markdown: Vec<markdown::Item>,
+        show_reasoning: bool,
+    },
+}
+
+impl Item {
+    pub fn view<'a>(&'a self, index: usize, theme: &Theme) -> Element<'a, Message> {
+        use iced::border;
+
+        let copy = action(icon::clipboard(), "Copy", || Message::Copy(self.clone()));
+
+        match self {
+            Self::Assistant {
+                reasoning,
+                content,
+                content_markdown,
+                show_reasoning,
+                ..
+            } => {
+                let message = markdown(
+                    content_markdown,
+                    markdown::Settings::default(),
+                    markdown::Style::from_palette(theme.palette()),
+                )
+                .map(Message::LinkClicked);
+
+                let message: Element<_> = if let Some(reasoning) = reasoning {
+                    let toggle = button(
+                        row![
+                            text!(
+                                "Thought for {duration} second{plural}",
+                                duration = reasoning.duration.as_secs(),
+                                plural = if reasoning.duration.as_secs() != 1 {
+                                    "s"
+                                } else {
+                                    ""
+                                }
+                            )
+                            .font(Font::MONOSPACE)
+                            .size(12),
+                            if *show_reasoning {
+                                icon::arrow_down()
+                            } else {
+                                icon::arrow_up()
+                            }
+                            .size(12),
+                        ]
+                        .spacing(10),
+                    )
+                    .on_press(Message::ToggleReasoning(index))
+                    .style(button::secondary);
+
+                    let reasoning: Element<_> = if *show_reasoning || content.is_empty() {
+                        let thoughts = text(&reasoning.content)
+                            .size(12)
+                            .shaping(text::Shaping::Advanced);
+
+                        column![
+                            toggle,
+                            row![vertical_rule(1), thoughts].spacing(10).height(Shrink)
+                        ]
+                        .spacing(10)
+                        .into()
+                    } else {
+                        toggle.into()
+                    };
+
+                    column![reasoning, message].spacing(20).into()
+                } else {
+                    message.into()
                 };
 
-                container::Style {
-                    background: Some(background.color.into()),
-                    text_color: Some(background.text),
-                    border: border::rounded(radius),
-                    ..container::Style::default()
+                let regenerate = action(icon::refresh(), "Regenerate", move || {
+                    Message::Regenerate(index)
+                });
+
+                let actions = row![copy, regenerate].spacing(10);
+
+                hover(container(message).padding([30, 0]), bottom(actions))
+            }
+            Self::User {
+                markdown: content, ..
+            } => {
+                let message = container(
+                    container(
+                        markdown(
+                            content,
+                            markdown::Settings::default(),
+                            markdown::Style::from_palette(theme.palette()),
+                        )
+                        .map(Message::LinkClicked),
+                    )
+                    .style(|theme: &Theme| {
+                        let palette = theme.extended_palette();
+
+                        container::Style {
+                            background: Some(palette.background.weak.color.into()),
+                            text_color: Some(palette.background.weak.text),
+                            border: border::rounded(10),
+                            ..container::Style::default()
+                        }
+                    })
+                    .padding(10),
+                )
+                .padding(padding::all(20).left(30).right(0));
+
+                right(hover(message, center_y(copy))).into()
+            }
+        }
+    }
+
+    pub fn into_text(self) -> String {
+        match self {
+            Self::User { content, .. } => content,
+            Self::Assistant {
+                reasoning,
+                content,
+                show_reasoning,
+                ..
+            } => match reasoning {
+                Some(reasoning) if show_reasoning => {
+                    format!("Reasoning:\n{}\n\n{content}", reasoning.content)
                 }
-            })
-            .padding(10),
-    )
-    .padding(match message {
-        assistant::Message::Assistant(_) => padding::right(20),
-        assistant::Message::User(_) => padding::left(20),
-    });
+                _ => content,
+            },
+        }
+    }
+}
 
-    let copy = tip(
-        button(icon::clipboard())
-            .on_press_with(|| Message::Copy(message.clone()))
-            .padding(0)
+const INPUT: &str = "input";
+const CHAT: &str = "chat";
+
+fn measure_input() -> Task<Message> {
+    container::visible_bounds(INPUT).map(Message::InputMeasured)
+}
+
+fn snap_chat_to_end() -> Task<Message> {
+    scrollable::snap_to(CHAT, scrollable::RelativeOffset::END)
+}
+
+fn action<'a>(
+    icon: Text<'a>,
+    label: &'a str,
+    message: impl Fn() -> Message + 'a,
+) -> Element<'a, Message> {
+    tip(
+        button(icon)
+            .on_press_with(message)
+            .padding([2, 7])
             .style(button::text),
-        "Copy to clipboard",
+        label,
         tip::Position::Bottom,
-    );
-
-    hover(
-        bubble,
-        container(copy)
-            .width(Fill)
-            .center_y(Fill)
-            .align_x(match message {
-                assistant::Message::Assistant(_) => Right,
-                assistant::Message::User(_) => Left,
-            }),
     )
 }

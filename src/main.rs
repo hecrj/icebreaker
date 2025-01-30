@@ -149,7 +149,9 @@ impl Icebreaker {
             Screen::Loading => screen::loading(),
             Screen::Search(search) => search.view().map(Message::Search),
             Screen::Boot(boot) => boot.view(self.theme()).map(Message::Boot),
-            Screen::Conversation(conversation) => conversation.view().map(Message::Conversation),
+            Screen::Conversation(conversation) => {
+                conversation.view(&self.theme()).map(Message::Conversation)
+            }
         }
     }
 

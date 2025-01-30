@@ -19,8 +19,8 @@ pub struct Assistant {
 }
 
 impl Assistant {
-    const LLAMA_CPP_CONTAINER_CPU: &'static str = "ghcr.io/ggerganov/llama.cpp:server-b4431";
-    const LLAMA_CPP_CONTAINER_CUDA: &'static str = "ghcr.io/ggerganov/llama.cpp:server-cuda-b4431";
+    const LLAMA_CPP_CONTAINER_CPU: &'static str = "ghcr.io/ggerganov/llama.cpp:server-b4589";
+    const LLAMA_CPP_CONTAINER_CUDA: &'static str = "ghcr.io/ggerganov/llama.cpp:server-cuda-b4589";
 
     const MODELS_DIR: &'static str = "./models";
     const HOST_PORT: u64 = 8080;
@@ -361,7 +361,7 @@ impl Assistant {
         &'a self,
         system_prompt: &'a str,
         messages: &'a [Message],
-    ) -> impl Stream<Item = Result<String, Error>> + 'a {
+    ) -> impl Stream<Item = Result<(Mode, String), Error>> + 'a {
         iced::stream::try_channel(1, move |mut sender| async move {
             let client = reqwest::Client::new();
 
@@ -369,7 +369,7 @@ impl Assistant {
                 let messages: Vec<_> = [("system", system_prompt)]
                     .into_iter()
                     .chain(messages.iter().map(|message| match message {
-                        Message::Assistant(content) => ("assistant", content.as_str()),
+                        Message::Assistant { content, .. } => ("assistant", content.as_str()),
                         Message::User(content) => ("user", content.as_str()),
                     }))
                     .map(|(role, content)| {
@@ -395,6 +395,7 @@ impl Assistant {
 
             let mut response = request.send().await?.error_for_status()?;
             let mut buffer = Vec::new();
+            let mut mode = Mode::Talking;
 
             while let Some(chunk) = response.chunk().await? {
                 buffer.extend(chunk);
@@ -430,13 +431,23 @@ impl Assistant {
                             break;
                         }
 
-                        let data: Data = serde_json::from_str(
+                        let mut data: Data = serde_json::from_str(
                             data.trim().strip_prefix("data: ").unwrap_or(data),
                         )?;
 
-                        if let Some(choice) = data.choices.first() {
-                            if let Some(content) = &choice.delta.content {
-                                let _ = sender.send(content.clone()).await;
+                        if let Some(choice) = data.choices.first_mut() {
+                            if let Some(content) = &mut choice.delta.content {
+                                if content.contains("<think>") {
+                                    mode = Mode::Reasoning;
+                                    *content = content.replace("<think>", "");
+                                }
+
+                                if content.contains("</think>") {
+                                    mode = Mode::Talking;
+                                    *content = content.replace("</think>", "");
+                                }
+
+                                let _ = sender.send((mode, content.clone())).await;
                             }
                         }
                     };
@@ -464,7 +475,7 @@ impl Assistant {
     ) -> Result<process::Child, Error> {
         let gpu_flags = match backend {
             Backend::Cpu => "",
-            Backend::Cuda => "--gpu-layers 40",
+            Backend::Cuda => "--gpu-layers 80",
         };
 
         let server = process::Command::new(executable)
@@ -505,18 +516,25 @@ impl Backend {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum Message {
-    Assistant(String),
+    Assistant {
+        reasoning: Option<Reasoning>,
+        content: String,
+    },
     User(String),
 }
 
-impl Message {
-    pub fn content(&self) -> &str {
-        match self {
-            Message::Assistant(content) | Message::User(content) => content,
-        }
-    }
+#[derive(Debug, Clone)]
+pub struct Reasoning {
+    pub content: String,
+    pub duration: Duration,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    Reasoning,
+    Talking,
 }
 
 #[derive(Debug)]
@@ -572,9 +590,8 @@ impl Model {
 
         let request = client.get(format!("{}/models", Self::API_URL)).query(&[
             ("search", query.as_ref()),
-            ("filter", "text-generation-inference"),
+            ("filter", "text-generation"),
             ("filter", "gguf"),
-            ("sort", "downloads"),
             ("limit", "100"),
             ("full", "true"),
         ]);
