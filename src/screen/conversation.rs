@@ -10,11 +10,11 @@ use iced::padding;
 use iced::task::{self, Task};
 use iced::time::{self, Duration, Instant};
 use iced::widget::{
-    self, bottom_center, button, center, center_x, column, container, horizontal_space, hover,
-    markdown, progress_bar, right, right_center, row, scrollable, stack, text, text_editor,
-    tooltip, value, vertical_rule, vertical_space,
+    self, bottom, bottom_center, button, center, center_x, center_y, column, container,
+    horizontal_space, hover, markdown, progress_bar, right, right_center, row, scrollable, stack,
+    text, text_editor, tooltip, value, vertical_rule, vertical_space, Text,
 };
-use iced::{Center, Element, Fill, Font, Left, Rectangle, Right, Shrink, Subscription, Theme};
+use iced::{Center, Element, Fill, Font, Rectangle, Shrink, Subscription, Theme};
 
 pub struct Conversation {
     backend: Backend,
@@ -54,6 +54,7 @@ pub enum Message {
     Submit,
     Chatting(Result<chat::Event, Error>),
     Copy(Item),
+    Regenerate(usize),
     ToggleReasoning(usize),
     Created(Result<Chat, Error>),
     Saved(Result<Chat, Error>),
@@ -283,6 +284,23 @@ impl Conversation {
                 Action::None
             }
             Message::Copy(message) => Action::Run(clipboard::write(message.into_text())),
+            Message::Regenerate(index) => {
+                if let State::Running { assistant, sending } = &mut self.state {
+                    self.history.truncate(index);
+
+                    let (send, handle) = Task::run(
+                        chat::complete(assistant, self.history.messages().collect()),
+                        Message::Chatting,
+                    )
+                    .abortable();
+
+                    *sending = Some(handle.abort_on_drop());
+
+                    Action::Run(send)
+                } else {
+                    Action::None
+                }
+            }
             Message::ToggleReasoning(index) => {
                 if let Some(Item::Assistant { show_reasoning, .. }) = self.history.get_mut(index) {
                     *show_reasoning = !*show_reasoning;
@@ -536,7 +554,6 @@ impl Conversation {
                             .enumerate()
                             .map(|(i, item)| item.view(i, theme)),
                     )
-                    .spacing(40)
                     .padding(20)
                     .max_width(600),
                 )
@@ -732,6 +749,10 @@ impl History {
         }
     }
 
+    pub fn truncate(&mut self, amount: usize) {
+        self.items.truncate(amount);
+    }
+
     pub fn messages<'a>(&'a self) -> impl Iterator<Item = assistant::Message> + 'a {
         self.items.iter().cloned().map(assistant::Message::from)
     }
@@ -755,7 +776,9 @@ impl Item {
     pub fn view<'a>(&'a self, index: usize, theme: &Theme) -> Element<'a, Message> {
         use iced::border;
 
-        let message: Element<_> = match self {
+        let copy = action(icon::clipboard(), "Copy", || Message::Copy(self.clone()));
+
+        match self {
             Self::Assistant {
                 reasoning,
                 content,
@@ -770,7 +793,7 @@ impl Item {
                 )
                 .map(Message::UrlClicked);
 
-                if let Some(reasoning) = reasoning {
+                let message: Element<_> = if let Some(reasoning) = reasoning {
                     let toggle = button(
                         row![
                             text!(
@@ -814,53 +837,45 @@ impl Item {
                     column![reasoning, message].spacing(20).into()
                 } else {
                     message.into()
-                }
+                };
+
+                let regenerate = action(icon::refresh(), "Regenerate", move || {
+                    Message::Regenerate(index)
+                });
+
+                let actions = row![copy, regenerate].spacing(10);
+
+                hover(container(message).padding([30, 0]), bottom(actions))
             }
             Self::User {
                 markdown: content, ..
-            } => right(
-                container(
-                    markdown(
-                        content,
-                        markdown::Settings::default(),
-                        markdown::Style::from_palette(theme.palette()),
+            } => {
+                let message = container(
+                    container(
+                        markdown(
+                            content,
+                            markdown::Settings::default(),
+                            markdown::Style::from_palette(theme.palette()),
+                        )
+                        .map(Message::UrlClicked),
                     )
-                    .map(Message::UrlClicked),
+                    .style(|theme: &Theme| {
+                        let palette = theme.extended_palette();
+
+                        container::Style {
+                            background: Some(palette.background.weak.color.into()),
+                            text_color: Some(palette.background.weak.text),
+                            border: border::rounded(10),
+                            ..container::Style::default()
+                        }
+                    })
+                    .padding(10),
                 )
-                .style(|theme: &Theme| {
-                    let palette = theme.extended_palette();
+                .padding(padding::all(20).left(30).right(0));
 
-                    container::Style {
-                        background: Some(palette.background.weak.color.into()),
-                        text_color: Some(palette.background.weak.text),
-                        border: border::rounded(10),
-                        ..container::Style::default()
-                    }
-                })
-                .padding(10),
-            )
-            .into(),
-        };
-
-        let copy = tip(
-            button(icon::clipboard())
-                .on_press_with(|| Message::Copy(self.clone()))
-                .padding(0)
-                .style(button::text),
-            "Copy to clipboard",
-            tip::Position::Bottom,
-        );
-
-        hover(
-            message,
-            container(copy)
-                .width(Fill)
-                .center_y(Fill)
-                .align_x(match self {
-                    Self::Assistant { .. } => Right,
-                    Self::User { .. } => Left,
-                }),
-        )
+                right(hover(message, center_y(copy))).into()
+            }
+        }
     }
 
     pub fn into_text(self) -> String {
@@ -890,4 +905,19 @@ fn measure_input() -> Task<Message> {
 
 fn snap_chat_to_end() -> Task<Message> {
     scrollable::snap_to(CHAT, scrollable::RelativeOffset::END)
+}
+
+fn action<'a>(
+    icon: Text<'a>,
+    label: &'a str,
+    message: impl Fn() -> Message + 'a,
+) -> Element<'a, Message> {
+    tip(
+        button(icon)
+            .on_press_with(message)
+            .padding([2, 7])
+            .style(button::text),
+        label,
+        tip::Position::Bottom,
+    )
 }

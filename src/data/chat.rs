@@ -37,6 +37,8 @@ impl Chat {
         let bytes = fs::read(Self::path(&id).await?).await?;
         let schema: Schema = task::spawn_blocking(move || serde_json::from_slice(&bytes)).await??;
 
+        let _ = LastOpened::update(id).await;
+
         Ok(Self {
             id,
             file: schema.file,
@@ -59,10 +61,10 @@ impl Chat {
         let id = Id(Uuid::new_v4());
         let chat = Self::save(id, file, title, history).await?;
 
-        LastOpened::update(chat.id.clone()).await?;
+        LastOpened::update(chat.id).await?;
 
         List::push(Entry {
-            id: chat.id.clone(),
+            id: chat.id,
             file: chat.file.clone(),
             title: chat.title.clone(),
         })
@@ -77,7 +79,7 @@ impl Chat {
         title: Option<String>,
         history: Vec<Message>,
     ) -> Result<Self, Error> {
-        if let Ok(current) = Self::fetch(id.clone()).await {
+        if let Ok(current) = Self::fetch(id).await {
             if current.title != title {
                 let mut list = List::fetch().await?;
 
@@ -120,7 +122,7 @@ impl Chat {
 
                 match list.as_ref().and_then(|list| list.entries.first()) {
                     Some(entry) => {
-                        LastOpened::update(entry.id.clone()).await?;
+                        LastOpened::update(entry.id).await?;
                     }
                     None => {
                         LastOpened::delete().await?;
@@ -162,24 +164,15 @@ impl Content {
     }
 }
 
-pub fn send(
+pub fn complete(
     assistant: &Assistant,
-    history: Vec<Message>,
-    message: Content,
+    mut messages: Vec<Message>,
 ) -> impl Stream<Item = Result<Event, Error>> {
     const SYSTEM_PROMPT: &str = "You are a helpful assistant.";
 
     let assistant = assistant.clone();
-    let mut messages = history.to_vec();
-    let message = message.as_str().to_owned();
 
     iced::stream::try_channel(1, |mut sender| async move {
-        messages.push(Message::User(message.clone()));
-
-        let _ = sender
-            .send(Event::MessageSent(Message::User(message)))
-            .await;
-
         let mut reasoning = String::new();
         let mut reasoning_started_at = None;
         let mut content = String::new();
@@ -276,7 +269,32 @@ pub fn send(
     })
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub fn send(
+    assistant: &Assistant,
+    mut history: Vec<Message>,
+    message: Content,
+) -> impl Stream<Item = Result<Event, Error>> {
+    let assistant = assistant.clone();
+    let message = message.as_str().to_owned();
+
+    iced::stream::try_channel(1, |mut sender| async move {
+        history.push(Message::User(message.clone()));
+
+        let _ = sender
+            .send(Event::MessageSent(Message::User(message)))
+            .await;
+
+        let mut task = complete(&assistant, history).boxed();
+
+        while let Some(result) = task.next().await {
+            let _ = sender.send(result?).await;
+        }
+
+        Ok(())
+    })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Id(Uuid);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

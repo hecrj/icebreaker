@@ -1,6 +1,6 @@
 // Generated automatically by iced_fontello at build time.
 // Do not edit manually.
-// c503e19c014d4088df18af7446d35fed138cb328d6de87dbea1b9266a571c40c
+// d0532da8de7e85e9222f7c911baa104de985f1b7f84f01e82bf71feb9968acce
 use iced::widget::{text, Text};
 use iced::Font;
 
@@ -40,6 +40,10 @@ pub fn expand<'a>() -> Text<'a> {
 
 pub fn heart<'a>() -> Text<'a> {
     icon("\u{2665}")
+}
+
+pub fn refresh<'a>() -> Text<'a> {
+    icon("\u{E760}")
 }
 
 pub fn trash<'a>() -> Text<'a> {
