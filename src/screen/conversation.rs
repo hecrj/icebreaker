@@ -65,7 +65,7 @@ pub enum Message {
     New,
     Search,
     ToggleSidebar,
-    UrlClicked(markdown::Url),
+    LinkClicked(markdown::Url),
 }
 
 pub enum Action {
@@ -391,8 +391,9 @@ impl Conversation {
 
                 Action::None
             }
-            Message::UrlClicked(_url) => {
-                // TODO
+            Message::LinkClicked(url) => {
+                let _ = open::that_in_background(url.to_string());
+
                 Action::None
             }
         }
@@ -791,7 +792,7 @@ impl Item {
                     markdown::Settings::default(),
                     markdown::Style::from_palette(theme.palette()),
                 )
-                .map(Message::UrlClicked);
+                .map(Message::LinkClicked);
 
                 let message: Element<_> = if let Some(reasoning) = reasoning {
                     let toggle = button(
@@ -857,7 +858,7 @@ impl Item {
                             markdown::Settings::default(),
                             markdown::Style::from_palette(theme.palette()),
                         )
-                        .map(Message::UrlClicked),
+                        .map(Message::LinkClicked),
                     )
                     .style(|theme: &Theme| {
                         let palette = theme.extended_palette();
