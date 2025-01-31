@@ -302,8 +302,12 @@ impl Conversation {
                 }
             }
             Message::ToggleReasoning(index) => {
-                if let Some(Item::Assistant { show_reasoning, .. }) = self.history.get_mut(index) {
-                    *show_reasoning = !*show_reasoning;
+                if let Some(Item::Assistant {
+                    reasoning: Some(reasoning),
+                    ..
+                }) = self.history.get_mut(index)
+                {
+                    reasoning.show = !reasoning.show;
                 }
 
                 Action::None
@@ -687,10 +691,13 @@ impl From<assistant::Message> for Item {
                 let content_markdown = markdown::parse(&content).collect();
 
                 Item::Assistant {
-                    reasoning,
+                    reasoning: reasoning.map(|reasoning| Reasoning {
+                        thoughts: reasoning.content.split("\n\n").map(str::to_owned).collect(),
+                        duration: reasoning.duration,
+                        show: true,
+                    }),
                     content,
                     content_markdown,
-                    show_reasoning: true,
                 }
             }
             assistant::Message::User(content) => {
@@ -708,7 +715,13 @@ impl From<Item> for assistant::Message {
             Item::User { content, .. } => assistant::Message::User(content),
             Item::Assistant {
                 reasoning, content, ..
-            } => assistant::Message::Assistant { reasoning, content },
+            } => assistant::Message::Assistant {
+                reasoning: reasoning.map(|reasoning| assistant::Reasoning {
+                    content: reasoning.thoughts.join("\n\n"),
+                    duration: reasoning.duration,
+                }),
+                content,
+            },
         }
     }
 }
@@ -766,11 +779,17 @@ pub enum Item {
         markdown: Vec<markdown::Item>,
     },
     Assistant {
-        reasoning: Option<assistant::Reasoning>,
+        reasoning: Option<Reasoning>,
         content: String,
         content_markdown: Vec<markdown::Item>,
-        show_reasoning: bool,
     },
+}
+
+#[derive(Debug, Clone)]
+pub struct Reasoning {
+    thoughts: Vec<String>,
+    duration: Duration,
+    show: bool,
 }
 
 impl Item {
@@ -784,7 +803,6 @@ impl Item {
                 reasoning,
                 content,
                 content_markdown,
-                show_reasoning,
                 ..
             } => {
                 let message = markdown(
@@ -808,7 +826,7 @@ impl Item {
                             )
                             .font(Font::MONOSPACE)
                             .size(12),
-                            if *show_reasoning {
+                            if reasoning.show {
                                 icon::arrow_down()
                             } else {
                                 icon::arrow_up()
@@ -820,10 +838,14 @@ impl Item {
                     .on_press(Message::ToggleReasoning(index))
                     .style(button::secondary);
 
-                    let reasoning: Element<_> = if *show_reasoning || content.is_empty() {
-                        let thoughts = text(&reasoning.content)
-                            .size(12)
-                            .shaping(text::Shaping::Advanced);
+                    let reasoning: Element<_> = if reasoning.show || content.is_empty() {
+                        let thoughts = column(reasoning.thoughts.iter().map(|thought| {
+                            text(thought)
+                                .size(12)
+                                .shaping(text::Shaping::Advanced)
+                                .into()
+                        }))
+                        .spacing(12);
 
                         column![
                             toggle,
@@ -883,13 +905,13 @@ impl Item {
         match self {
             Self::User { content, .. } => content,
             Self::Assistant {
-                reasoning,
-                content,
-                show_reasoning,
-                ..
+                reasoning, content, ..
             } => match reasoning {
-                Some(reasoning) if show_reasoning => {
-                    format!("Reasoning:\n{}\n\n{content}", reasoning.content)
+                Some(reasoning) if reasoning.show => {
+                    format!(
+                        "Reasoning:\n{}\n\n{content}",
+                        reasoning.thoughts.join("\n\n")
+                    )
                 }
                 _ => content,
             },
