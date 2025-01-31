@@ -19,8 +19,9 @@ pub struct Assistant {
 }
 
 impl Assistant {
-    const LLAMA_CPP_CONTAINER_CPU: &'static str = "ghcr.io/ggerganov/llama.cpp:server-b4589";
-    const LLAMA_CPP_CONTAINER_CUDA: &'static str = "ghcr.io/ggerganov/llama.cpp:server-cuda-b4589";
+    const LLAMA_CPP_CONTAINER_CPU: &'static str = "ghcr.io/ggerganov/llama.cpp:server-b4600";
+    const LLAMA_CPP_CONTAINER_CUDA: &'static str = "ghcr.io/ggerganov/llama.cpp:server-cuda-b4600";
+    const LLAMA_CPP_CONTAINER_ROCM: &'static str = "ghcr.io/hecrj/llama.cpp:server-rocm";
 
     const MODELS_DIR: &'static str = "./models";
     const HOST_PORT: u64 = 8080;
@@ -221,13 +222,26 @@ impl Assistant {
                             volume = Self::MODELS_DIR,
                         )
                     }
-                    Backend::Cuda => {
+                    Backend::Gpu(GpuBackend::Cuda) => {
                         format!(
                             "create --rm --gpus all -p {port}:80 -v {volume}:/models \
                             {container} --model /models/{filename} \
                             --port 80 --host 0.0.0.0 --gpu-layers 40",
                             filename = file.name,
                             container = Self::LLAMA_CPP_CONTAINER_CUDA,
+                            port = Self::HOST_PORT,
+                            volume = Self::MODELS_DIR,
+                        )
+                    }
+                    Backend::Gpu(GpuBackend::Rocm) => {
+                        format!(
+                            "create --rm -p {port}:80 -v {volume}:/models \
+                            --device=/dev/kfd --device=/dev/dri \
+                            --security-opt seccomp=unconfined --group-add video \
+                            {container} --model /models/{filename} \
+                            --port 80 --host 0.0.0.0 --gpu-layers 40",
+                            filename = file.name,
+                            container = Self::LLAMA_CPP_CONTAINER_ROCM,
                             port = Self::HOST_PORT,
                             volume = Self::MODELS_DIR,
                         )
@@ -483,7 +497,7 @@ impl Assistant {
     ) -> Result<process::Child, Error> {
         let gpu_flags = match backend {
             Backend::Cpu => "",
-            Backend::Cuda => "--gpu-layers 80",
+            Backend::Gpu(_) => "--gpu-layers 80",
         };
 
         let server = process::Command::new(executable)
@@ -511,13 +525,20 @@ impl Assistant {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Backend {
     Cpu,
+    Gpu(GpuBackend),
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GpuBackend {
+    Rocm,
     Cuda,
 }
 
 impl Backend {
     pub fn detect(graphics_adapter: &str) -> Self {
         if graphics_adapter.contains("NVIDIA") {
-            Self::Cuda
+            Self::Gpu(GpuBackend::Cuda)
+        } else if graphics_adapter.contains("AMD") {
+            Self::Gpu(GpuBackend::Rocm)
         } else {
             Self::Cpu
         }

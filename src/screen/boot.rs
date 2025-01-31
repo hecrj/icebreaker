@@ -1,4 +1,4 @@
-use crate::data::assistant::{Backend, File, Model};
+use crate::data::assistant::{Backend, File, GpuBackend, Model};
 use crate::widget::tip;
 
 use iced::system;
@@ -12,7 +12,8 @@ pub struct Boot {
     model: Model,
     file: Option<File>,
     readme: Vec<markdown::Item>,
-    use_cuda: bool,
+    use_gpu: bool,
+    backend: Backend,
 }
 
 #[derive(Debug, Clone)]
@@ -21,7 +22,7 @@ pub enum Message {
     FileSelected(File),
     Boot,
     Abort,
-    UseCUDAToggled(bool),
+    UseGPUToggled(bool),
     LinkClicked(markdown::Url),
 }
 
@@ -33,6 +34,9 @@ pub enum Action {
 
 impl Boot {
     pub fn new(model: Model, system: Option<&system::Information>) -> (Self, Task<Message>) {
+        let backend = system
+            .map(|system| Backend::detect(&system.graphics_adapter))
+            .unwrap_or(Backend::Cpu);
         (
             Self {
                 model: model.clone(),
@@ -42,9 +46,8 @@ impl Boot {
                     None
                 },
                 readme: Vec::new(),
-                use_cuda: system
-                    .map(|system| Backend::detect(&system.graphics_adapter) == Backend::Cuda)
-                    .unwrap_or_default(),
+                use_gpu: matches!(backend, Backend::Gpu(_)),
+                backend,
             },
             Task::future(model.fetch_readme())
                 .and_then(|readme| {
@@ -78,10 +81,10 @@ impl Boot {
                 if let Some(file) = self.file.clone() {
                     Action::Boot {
                         file,
-                        backend: if self.use_cuda {
-                            Backend::Cuda
+                        backend: if self.use_gpu && !matches!(self.backend, Backend::Gpu(_)) {
+                            Backend::Gpu(GpuBackend::Cuda)
                         } else {
-                            Backend::Cpu
+                            self.backend
                         },
                     }
                 } else {
@@ -89,8 +92,8 @@ impl Boot {
                 }
             }
             Message::Abort => Action::Abort,
-            Message::UseCUDAToggled(use_cuda) => {
-                self.use_cuda = use_cuda;
+            Message::UseGPUToggled(use_gpu) => {
+                self.use_gpu = use_gpu;
 
                 Action::None
             }
@@ -107,13 +110,13 @@ impl Boot {
 
         let boot = {
             let use_cuda = {
-                let toggle = toggler(self.use_cuda)
-                    .label("Use CUDA")
-                    .on_toggle(Message::UseCUDAToggled);
+                let toggle = toggler(self.use_gpu)
+                    .label("Use GPU")
+                    .on_toggle(Message::UseGPUToggled);
 
                 tip(
                     toggle,
-                    "Only supported on NVIDIA cards!",
+                    "Only supported on AMD and NVIDIA cards!",
                     tip::Position::Left,
                 )
             };
