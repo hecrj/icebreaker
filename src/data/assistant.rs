@@ -395,7 +395,7 @@ impl Assistant {
 
             let mut response = request.send().await?.error_for_status()?;
             let mut buffer = Vec::new();
-            let mut mode = Mode::Talking;
+            let mut mode = None;
 
             while let Some(chunk) = response.chunk().await? {
                 buffer.extend(chunk);
@@ -437,17 +437,21 @@ impl Assistant {
 
                         if let Some(choice) = data.choices.first_mut() {
                             if let Some(content) = &mut choice.delta.content {
-                                if content.contains("<think>") {
-                                    mode = Mode::Reasoning;
-                                    *content = content.replace("<think>", "");
+                                match mode {
+                                    None if content.contains("<think>") => {
+                                        mode = Some(Mode::Reasoning);
+                                        *content = content.replace("<think>", "");
+                                    }
+                                    Some(Mode::Reasoning) if content.contains("</think>") => {
+                                        mode = Some(Mode::Talking);
+                                        *content = content.replace("</think>", "");
+                                    }
+                                    _ => {}
                                 }
 
-                                if content.contains("</think>") {
-                                    mode = Mode::Talking;
-                                    *content = content.replace("</think>", "");
-                                }
-
-                                let _ = sender.send((mode, content.clone())).await;
+                                let _ = sender
+                                    .send((mode.unwrap_or(Mode::Talking), content.clone()))
+                                    .await;
                             }
                         }
                     };

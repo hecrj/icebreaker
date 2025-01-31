@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use std::io;
 use std::path::PathBuf;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone)]
 pub struct Chat {
@@ -174,7 +174,8 @@ pub fn complete(
 
     iced::stream::try_channel(1, |mut sender| async move {
         let mut reasoning = String::new();
-        let mut reasoning_started_at = None;
+        let mut reasoning_started_at: Option<Instant> = None;
+        let mut reasoning_duration = Duration::ZERO;
         let mut content = String::new();
 
         let _ = sender
@@ -193,7 +194,9 @@ pub fn complete(
                     assistant::Mode::Reasoning => {
                         reasoning.push_str(&token);
 
-                        if reasoning_started_at.is_none() {
+                        if let Some(reasoning_started_at) = reasoning_started_at {
+                            reasoning_duration = reasoning_started_at.elapsed();
+                        } else {
                             reasoning_started_at = Some(Instant::now());
                         }
                     }
@@ -211,14 +214,12 @@ pub fn complete(
 
                 let _ = sender
                     .send(event(Message::Assistant {
-                        reasoning: if let Some(started_at) = reasoning_started_at {
-                            Some(assistant::Reasoning {
+                        reasoning: reasoning_started_at
+                            .is_some()
+                            .then(|| assistant::Reasoning {
                                 content: reasoning.trim().to_owned(),
-                                duration: started_at.elapsed(),
-                            })
-                        } else {
-                            None
-                        },
+                                duration: reasoning_duration,
+                            }),
                         content: content.trim().to_owned(),
                     }))
                     .await;
