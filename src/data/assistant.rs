@@ -8,6 +8,7 @@ use tokio::fs;
 use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt};
 use tokio::process;
 
+use std::env;
 use std::fmt;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -25,6 +26,7 @@ impl Assistant {
 
     const MODELS_DIR: &'static str = "./models";
     const HOST_PORT: u64 = 8080;
+    const LLAMA_ARGS: &'static str = "ICEBREAKER_LLAMA_ARGS";
 
     pub fn boot(file: File, backend: Backend) -> impl Stream<Item = Result<BootEvent, Error>> {
         #[derive(Clone)]
@@ -215,22 +217,24 @@ impl Assistant {
                         format!(
                             "create --rm -p {port}:80 -v {volume}:/models \
                             {container} --model /models/{filename} \
-                            --port 80 --host 0.0.0.0",
+                            --port 80 --host 0.0.0.0 {llama_args}",
                             filename = file.name,
                             container = Self::LLAMA_CPP_CONTAINER_CPU,
                             port = Self::HOST_PORT,
                             volume = Self::MODELS_DIR,
+                            llama_args = env::var(Self::LLAMA_ARGS).unwrap_or_default(),
                         )
                     }
                     Backend::Cuda => {
                         format!(
                             "create --rm --gpus all -p {port}:80 -v {volume}:/models \
                             {container} --model /models/{filename} \
-                            --port 80 --host 0.0.0.0 --gpu-layers 40",
+                            --port 80 --host 0.0.0.0 --gpu-layers 40 {llama_args}",
                             filename = file.name,
                             container = Self::LLAMA_CPP_CONTAINER_CUDA,
                             port = Self::HOST_PORT,
                             volume = Self::MODELS_DIR,
+                            llama_args = env::var(Self::LLAMA_ARGS).unwrap_or_default(),
                         )
                     }
                     Backend::Rocm => {
@@ -239,11 +243,12 @@ impl Assistant {
                             --device=/dev/kfd --device=/dev/dri \
                             --security-opt seccomp=unconfined --group-add video \
                             {container} --model /models/{filename} \
-                            --port 80 --host 0.0.0.0 --gpu-layers 40",
+                            --port 80 --host 0.0.0.0 --gpu-layers 40 {llama_args}",
                             filename = file.name,
                             container = Self::LLAMA_CPP_CONTAINER_ROCM,
                             port = Self::HOST_PORT,
                             volume = Self::MODELS_DIR,
+                            llama_args = env::var(Self::LLAMA_ARGS).unwrap_or_default(),
                         )
                     }
                 };
@@ -503,8 +508,9 @@ impl Assistant {
         let server = process::Command::new(executable)
             .args(Self::parse_args(&format!(
                 "--model models/{filename} \
-                    --port 8080 --host 0.0.0.0 {gpu_flags}",
+                    --port 8080 --host 0.0.0.0 {gpu_flags} {llama_args}",
                 filename = file.name,
+                llama_args = env::var(Self::LLAMA_ARGS).unwrap_or_default(),
             )))
             .kill_on_drop(true)
             .stdout(std::process::Stdio::piped())
