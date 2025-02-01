@@ -139,8 +139,12 @@ impl Chat {
 #[derive(Debug, Clone)]
 pub enum Event {
     MessageSent(Message),
-    MessageAdded(Message),
-    LastMessageChanged(Message),
+    MessageAdded,
+    LastMessageChanged {
+        reasoning: Option<assistant::Reasoning>,
+        content: String,
+        new_token: assistant::Token,
+    },
     ExchangeOver,
     TitleChanged(String),
 }
@@ -178,21 +182,15 @@ pub fn complete(
         let mut reasoning_duration = Duration::ZERO;
         let mut content = String::new();
 
-        let _ = sender
-            .send(Event::MessageAdded(Message::Assistant {
-                reasoning: None,
-                content: content.clone(),
-            }))
-            .await;
+        let _ = sender.send(Event::MessageAdded).await;
 
         {
             let mut next_message = assistant.complete(SYSTEM_PROMPT, &messages).boxed();
-            let mut first = false;
 
-            while let Some((mode, token)) = next_message.next().await.transpose()? {
-                match mode {
-                    assistant::Mode::Reasoning => {
-                        reasoning.push_str(&token);
+            while let Some(token) = next_message.next().await.transpose()? {
+                match &token {
+                    assistant::Token::Reasoning(token) => {
+                        reasoning.push_str(token);
 
                         if let Some(reasoning_started_at) = reasoning_started_at {
                             reasoning_duration = reasoning_started_at.elapsed();
@@ -200,20 +198,13 @@ pub fn complete(
                             reasoning_started_at = Some(Instant::now());
                         }
                     }
-                    assistant::Mode::Talking => {
-                        content.push_str(&token);
+                    assistant::Token::Talking(token) => {
+                        content.push_str(token);
                     }
                 }
 
-                let event = if first {
-                    first = false;
-                    Event::MessageAdded
-                } else {
-                    Event::LastMessageChanged
-                };
-
                 let _ = sender
-                    .send(event(Message::Assistant {
+                    .send(Event::LastMessageChanged {
                         reasoning: reasoning_started_at
                             .is_some()
                             .then(|| assistant::Reasoning {
@@ -221,7 +212,8 @@ pub fn complete(
                                 duration: reasoning_duration,
                             }),
                         content: content.trim().to_owned(),
-                    }))
+                        new_token: token,
+                    })
                     .await;
             }
         }
@@ -241,25 +233,23 @@ pub fn complete(
             let mut title_suggestion = assistant.complete(SYSTEM_PROMPT, &messages).boxed();
             let mut title = String::new();
 
-            while let Some((mode, token)) = title_suggestion.next().await.transpose()? {
-                if mode == assistant::Mode::Reasoning {
-                    continue;
-                }
+            while let Some(token) = title_suggestion.next().await.transpose()? {
+                if let assistant::Token::Talking(token) = token {
+                    title.push_str(&token);
 
-                title.push_str(&token);
+                    if title.len() > 80 {
+                        title.push_str("...");
+                    }
 
-                if title.len() > 80 {
-                    title.push_str("...");
-                }
+                    let _ = sender
+                        .send(Event::TitleChanged(
+                            title.trim().trim_matches('"').to_owned(),
+                        ))
+                        .await;
 
-                let _ = sender
-                    .send(Event::TitleChanged(
-                        title.trim().trim_matches('"').to_owned(),
-                    ))
-                    .await;
-
-                if title.len() > 80 {
-                    break;
+                    if title.len() > 80 {
+                        break;
+                    }
                 }
             }
         }
