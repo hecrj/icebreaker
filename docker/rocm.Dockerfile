@@ -2,6 +2,7 @@ ARG UBUNTU_VERSION=24.04
 
 ARG ROCM_VERSION=6.3
 ARG AMDGPU_VERSION=6.3
+ARG LLAMACPP_VERSION=b4600
 
 ARG BASE_ROCM_DEV_CONTAINER=rocm/dev-ubuntu-${UBUNTU_VERSION}:${ROCM_VERSION}-complete
 
@@ -23,7 +24,7 @@ RUN apt-get update \
 
 WORKDIR /app
 
-RUN git clone https://github.com/ggerganov/llama.cpp --depth=1 .
+RUN git clone https://github.com/ggerganov/llama.cpp --branch=${LLAMACPP_VERSION} --depth=1 .
 
 RUN HIPCXX="$(hipconfig -l)/clang" HIP_PATH="$(hipconfig -R)" \
     cmake -S . -B build -DLLAMA_HIPBLAS=ON -DGGML_HIP=ON -DAMDGPU_TARGETS=$ROCM_DOCKER_ARCH -DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=ON \

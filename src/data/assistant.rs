@@ -21,7 +21,7 @@ pub struct Assistant {
 impl Assistant {
     const LLAMA_CPP_CONTAINER_CPU: &'static str = "ghcr.io/ggerganov/llama.cpp:server-b4600";
     const LLAMA_CPP_CONTAINER_CUDA: &'static str = "ghcr.io/ggerganov/llama.cpp:server-cuda-b4600";
-    const LLAMA_CPP_CONTAINER_ROCM: &'static str = "ghcr.io/hecrj/llama.cpp:server-rocm";
+    const LLAMA_CPP_CONTAINER_ROCM: &'static str = "ghcr.io/hecrj/icebreaker:server-rocm-b4600";
 
     const MODELS_DIR: &'static str = "./models";
     const HOST_PORT: u64 = 8080;

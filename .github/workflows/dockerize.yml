@@ -10,6 +10,8 @@ permissions:
 jobs:
   rocm:
     runs-on: ubuntu-22.04
+    env:
+      LLAMACPP_VERSION: b4600
     strategy:
       fail-fast: false
     steps:
@@ -40,9 +42,11 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/llama.cpp:server-rocm
+            ghcr.io/${{ github.repository }}:server-rocm-${{ env.LLAMACPP_VERSION }}
           file: docker/rocm.Dockerfile
           target: server
+          build-args: |
+            LLAMACPP_VERSION=${{ env.LLAMACPP_VERSION }}
           provenance: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
