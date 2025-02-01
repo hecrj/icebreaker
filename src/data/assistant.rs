@@ -19,8 +19,9 @@ pub struct Assistant {
 }
 
 impl Assistant {
-    const LLAMA_CPP_CONTAINER_CPU: &'static str = "ghcr.io/ggerganov/llama.cpp:server-b4589";
-    const LLAMA_CPP_CONTAINER_CUDA: &'static str = "ghcr.io/ggerganov/llama.cpp:server-cuda-b4589";
+    const LLAMA_CPP_CONTAINER_CPU: &'static str = "ghcr.io/ggerganov/llama.cpp:server-b4600";
+    const LLAMA_CPP_CONTAINER_CUDA: &'static str = "ghcr.io/ggerganov/llama.cpp:server-cuda-b4600";
+    const LLAMA_CPP_CONTAINER_ROCM: &'static str = "ghcr.io/hecrj/llama.cpp:server-rocm";
 
     const MODELS_DIR: &'static str = "./models";
     const HOST_PORT: u64 = 8080;
@@ -228,6 +229,19 @@ impl Assistant {
                             --port 80 --host 0.0.0.0 --gpu-layers 40",
                             filename = file.name,
                             container = Self::LLAMA_CPP_CONTAINER_CUDA,
+                            port = Self::HOST_PORT,
+                            volume = Self::MODELS_DIR,
+                        )
+                    }
+                    Backend::Rocm => {
+                        format!(
+                            "create --rm -p {port}:80 -v {volume}:/models \
+                            --device=/dev/kfd --device=/dev/dri \
+                            --security-opt seccomp=unconfined --group-add video \
+                            {container} --model /models/{filename} \
+                            --port 80 --host 0.0.0.0 --gpu-layers 40",
+                            filename = file.name,
+                            container = Self::LLAMA_CPP_CONTAINER_ROCM,
                             port = Self::HOST_PORT,
                             volume = Self::MODELS_DIR,
                         )
@@ -483,7 +497,7 @@ impl Assistant {
     ) -> Result<process::Child, Error> {
         let gpu_flags = match backend {
             Backend::Cpu => "",
-            Backend::Cuda => "--gpu-layers 80",
+            Backend::Cuda | Backend::Rocm => "--gpu-layers 80",
         };
 
         let server = process::Command::new(executable)
@@ -512,14 +526,24 @@ impl Assistant {
 pub enum Backend {
     Cpu,
     Cuda,
+    Rocm,
 }
 
 impl Backend {
     pub fn detect(graphics_adapter: &str) -> Self {
         if graphics_adapter.contains("NVIDIA") {
             Self::Cuda
+        } else if graphics_adapter.contains("AMD") {
+            Self::Rocm
         } else {
             Self::Cpu
+        }
+    }
+
+    pub fn uses_gpu(self) -> bool {
+        match self {
+            Backend::Cuda | Backend::Rocm => true,
+            Backend::Cpu => false,
         }
     }
 }
