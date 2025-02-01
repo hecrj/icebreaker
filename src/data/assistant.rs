@@ -222,7 +222,7 @@ impl Assistant {
                             volume = Self::MODELS_DIR,
                         )
                     }
-                    Backend::Gpu(GpuBackend::Cuda) => {
+                    Backend::Cuda => {
                         format!(
                             "create --rm --gpus all -p {port}:80 -v {volume}:/models \
                             {container} --model /models/{filename} \
@@ -233,7 +233,7 @@ impl Assistant {
                             volume = Self::MODELS_DIR,
                         )
                     }
-                    Backend::Gpu(GpuBackend::Rocm) => {
+                    Backend::Rocm => {
                         format!(
                             "create --rm -p {port}:80 -v {volume}:/models \
                             --device=/dev/kfd --device=/dev/dri \
@@ -497,7 +497,7 @@ impl Assistant {
     ) -> Result<process::Child, Error> {
         let gpu_flags = match backend {
             Backend::Cpu => "",
-            Backend::Gpu(_) => "--gpu-layers 80",
+            Backend::Cuda | Backend::Rocm => "--gpu-layers 80",
         };
 
         let server = process::Command::new(executable)
@@ -525,22 +525,25 @@ impl Assistant {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Backend {
     Cpu,
-    Gpu(GpuBackend),
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GpuBackend {
-    Rocm,
     Cuda,
+    Rocm,
 }
 
 impl Backend {
     pub fn detect(graphics_adapter: &str) -> Self {
         if graphics_adapter.contains("NVIDIA") {
-            Self::Gpu(GpuBackend::Cuda)
+            Self::Cuda
         } else if graphics_adapter.contains("AMD") {
-            Self::Gpu(GpuBackend::Rocm)
+            Self::Rocm
         } else {
             Self::Cpu
+        }
+    }
+
+    pub fn uses_gpu(self) -> bool {
+        match self {
+            Backend::Cuda | Backend::Rocm => true,
+            Backend::Cpu => false,
         }
     }
 }

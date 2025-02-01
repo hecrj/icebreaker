@@ -1,4 +1,4 @@
-use crate::data::assistant::{Backend, File, GpuBackend, Model};
+use crate::data::assistant::{Backend, File, Model};
 use crate::widget::tip;
 
 use iced::system;
@@ -13,7 +13,7 @@ pub struct Boot {
     file: Option<File>,
     readme: Vec<markdown::Item>,
     use_gpu: bool,
-    backend: Backend,
+    supported_backend: Backend,
 }
 
 #[derive(Debug, Clone)]
@@ -34,9 +34,10 @@ pub enum Action {
 
 impl Boot {
     pub fn new(model: Model, system: Option<&system::Information>) -> (Self, Task<Message>) {
-        let backend = system
+        let supported_backend = system
             .map(|system| Backend::detect(&system.graphics_adapter))
             .unwrap_or(Backend::Cpu);
+
         (
             Self {
                 model: model.clone(),
@@ -46,8 +47,8 @@ impl Boot {
                     None
                 },
                 readme: Vec::new(),
-                use_gpu: matches!(backend, Backend::Gpu(_)),
-                backend,
+                use_gpu: supported_backend.uses_gpu(),
+                supported_backend,
             },
             Task::future(model.fetch_readme())
                 .and_then(|readme| {
@@ -81,10 +82,10 @@ impl Boot {
                 if let Some(file) = self.file.clone() {
                     Action::Boot {
                         file,
-                        backend: if self.use_gpu && !matches!(self.backend, Backend::Gpu(_)) {
-                            Backend::Gpu(GpuBackend::Cuda)
+                        backend: if self.use_gpu {
+                            self.supported_backend
                         } else {
-                            self.backend
+                            Backend::Cpu
                         },
                     }
                 } else {
@@ -110,9 +111,11 @@ impl Boot {
 
         let boot = {
             let use_cuda = {
-                let toggle = toggler(self.use_gpu)
-                    .label("Use GPU")
-                    .on_toggle(Message::UseGPUToggled);
+                let toggle = toggler(self.use_gpu).label("Use GPU").on_toggle_maybe(
+                    self.supported_backend
+                        .uses_gpu()
+                        .then_some(Message::UseGPUToggled),
+                );
 
                 tip(
                     toggle,
