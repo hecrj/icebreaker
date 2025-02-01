@@ -1,18 +1,15 @@
-name: Publish Docker image
-
+name: Dockerize
 on:
   workflow_dispatch:
   push:
     paths:
-      - '.github/workflows/docker.yml'
-
+      - '.github/workflows/dockerize.yml'
+      - 'docker/rocm.Dockerfile'
 permissions:
   packages: write
-
 jobs:
   push_to_registry:
-    name: Push Docker image
-
+    name: rocm
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -31,7 +28,6 @@ jobs:
         uses: ggml-org/free-disk-space@v1.3.1
         with:
           tool-cache: false
-
           android: true
           dotnet: true
           haskell: true
@@ -39,14 +35,14 @@ jobs:
           docker-images: true
           swap-storage: true
 
-      - name: Build and push Server Docker image (tagged + versioned)
+      - name: Build and push server Docker image (tagged + versioned)
         uses: docker/build-push-action@v6
         with:
           push: true
           platforms: linux/amd64
           tags: |
             ghcr.io/${{ github.repository_owner }}/llama.cpp:server-rocm
-          file: rocm.Dockerfile
+          file: docker/rocm.Dockerfile
           target: server
           provenance: false
           cache-from: type=gha
