@@ -53,7 +53,7 @@ pub enum Message {
     InputMeasured(Option<Rectangle>),
     Submit,
     Chatting(Result<chat::Event, Error>),
-    Copy(Item),
+    Copy(String),
     Regenerate(usize),
     ToggleReasoning(usize),
     Created(Result<Chat, Error>),
@@ -229,13 +229,33 @@ impl Conversation {
 
                     Action::None
                 }
-                chat::Event::MessageAdded(message) => {
-                    self.history.push(message);
+                chat::Event::MessageAdded => {
+                    self.history.push(Item::Assistant {
+                        reasoning: None,
+                        content: String::new(),
+                        content_markdown: markdown::Content::new(),
+                    });
 
                     Action::Run(snap_chat_to_end())
                 }
-                chat::Event::LastMessageChanged(new_message) => {
-                    self.history.replace_last(new_message);
+                chat::Event::LastMessageChanged {
+                    reasoning: new_reasoning,
+                    content: new_content,
+                    new_token,
+                } => {
+                    if let Some(Item::Assistant {
+                        reasoning,
+                        content,
+                        content_markdown,
+                    }) = self.history.last_mut()
+                    {
+                        *reasoning = new_reasoning.map(Reasoning::from);
+                        *content = new_content;
+
+                        if let assistant::Token::Talking(token) = new_token {
+                            content_markdown.push_str(&token);
+                        }
+                    }
 
                     Action::None
                 }
@@ -283,7 +303,7 @@ impl Conversation {
 
                 Action::None
             }
-            Message::Copy(message) => Action::Run(clipboard::write(message.into_text())),
+            Message::Copy(content) => Action::Run(clipboard::write(content)),
             Message::Regenerate(index) => {
                 if let State::Running { assistant, sending } = &mut self.state {
                     self.history.truncate(index);
@@ -684,48 +704,6 @@ impl Conversation {
     }
 }
 
-impl From<assistant::Message> for Item {
-    fn from(message: assistant::Message) -> Self {
-        match message {
-            assistant::Message::Assistant { reasoning, content } => {
-                let content_markdown = markdown::parse(&content).collect();
-
-                Item::Assistant {
-                    reasoning: reasoning.map(|reasoning| Reasoning {
-                        thoughts: reasoning.content.split("\n\n").map(str::to_owned).collect(),
-                        duration: reasoning.duration,
-                        show: true,
-                    }),
-                    content,
-                    content_markdown,
-                }
-            }
-            assistant::Message::User(content) => {
-                let markdown = markdown::parse(&content).collect();
-
-                Item::User { content, markdown }
-            }
-        }
-    }
-}
-
-impl From<Item> for assistant::Message {
-    fn from(item: Item) -> Self {
-        match item {
-            Item::User { content, .. } => assistant::Message::User(content),
-            Item::Assistant {
-                reasoning, content, ..
-            } => assistant::Message::Assistant {
-                reasoning: reasoning.map(|reasoning| assistant::Reasoning {
-                    content: reasoning.thoughts.join("\n\n"),
-                    duration: reasoning.duration,
-                }),
-                content,
-            },
-        }
-    }
-}
-
 pub struct History {
     items: Vec<Item>,
 }
@@ -757,10 +735,8 @@ impl History {
         self.items.push(item.into());
     }
 
-    pub fn replace_last(&mut self, item: impl Into<Item>) {
-        if let Some(last) = self.items.last_mut() {
-            *last = item.into();
-        }
+    pub fn last_mut(&mut self) -> Option<&mut Item> {
+        self.items.last_mut()
     }
 
     pub fn truncate(&mut self, amount: usize) {
@@ -768,11 +744,11 @@ impl History {
     }
 
     pub fn messages<'a>(&'a self) -> impl Iterator<Item = assistant::Message> + 'a {
-        self.items.iter().cloned().map(assistant::Message::from)
+        self.items.iter().map(Item::to_message)
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Item {
     User {
         content: String,
@@ -781,22 +757,15 @@ pub enum Item {
     Assistant {
         reasoning: Option<Reasoning>,
         content: String,
-        content_markdown: Vec<markdown::Item>,
+        content_markdown: markdown::Content,
     },
-}
-
-#[derive(Debug, Clone)]
-pub struct Reasoning {
-    thoughts: Vec<String>,
-    duration: Duration,
-    show: bool,
 }
 
 impl Item {
     pub fn view<'a>(&'a self, index: usize, theme: &Theme) -> Element<'a, Message> {
         use iced::border;
 
-        let copy = action(icon::clipboard(), "Copy", || Message::Copy(self.clone()));
+        let copy = action(icon::clipboard(), "Copy", || Message::Copy(self.to_text()));
 
         match self {
             Self::Assistant {
@@ -806,7 +775,7 @@ impl Item {
                 ..
             } => {
                 let message = markdown(
-                    content_markdown,
+                    content_markdown.items(),
                     markdown::Settings::default(),
                     markdown::Style::from_palette(theme.palette()),
                 )
@@ -901,9 +870,9 @@ impl Item {
         }
     }
 
-    pub fn into_text(self) -> String {
+    pub fn to_text(&self) -> String {
         match self {
-            Self::User { content, .. } => content,
+            Self::User { content, .. } => content.clone(),
             Self::Assistant {
                 reasoning, content, ..
             } => match reasoning {
@@ -913,8 +882,61 @@ impl Item {
                         reasoning.thoughts.join("\n\n")
                     )
                 }
-                _ => content,
+                _ => content.clone(),
             },
+        }
+    }
+
+    fn to_message(&self) -> assistant::Message {
+        match self {
+            Self::User { content, .. } => assistant::Message::User(content.clone()),
+            Self::Assistant {
+                reasoning, content, ..
+            } => assistant::Message::Assistant {
+                reasoning: reasoning.as_ref().map(|reasoning| assistant::Reasoning {
+                    content: reasoning.thoughts.join("\n\n"),
+                    duration: reasoning.duration,
+                }),
+                content: content.clone(),
+            },
+        }
+    }
+}
+
+impl From<assistant::Message> for Item {
+    fn from(message: assistant::Message) -> Self {
+        match message {
+            assistant::Message::Assistant { reasoning, content } => {
+                let content_markdown = markdown::Content::parse(&content);
+
+                Item::Assistant {
+                    reasoning: reasoning.map(Reasoning::from),
+                    content,
+                    content_markdown,
+                }
+            }
+            assistant::Message::User(content) => {
+                let markdown = markdown::parse(&content).collect();
+
+                Item::User { content, markdown }
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Reasoning {
+    thoughts: Vec<String>,
+    duration: Duration,
+    show: bool,
+}
+
+impl From<assistant::Reasoning> for Reasoning {
+    fn from(reasoning: assistant::Reasoning) -> Self {
+        Self {
+            thoughts: reasoning.content.split("\n\n").map(str::to_owned).collect(),
+            duration: reasoning.duration,
+            show: true,
         }
     }
 }

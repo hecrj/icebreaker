@@ -361,7 +361,7 @@ impl Assistant {
         &'a self,
         system_prompt: &'a str,
         messages: &'a [Message],
-    ) -> impl Stream<Item = Result<(Mode, String), Error>> + 'a {
+    ) -> impl Stream<Item = Result<Token, Error>> + 'a {
         iced::stream::try_channel(1, move |mut sender| async move {
             let client = reqwest::Client::new();
 
@@ -395,7 +395,7 @@ impl Assistant {
 
             let mut response = request.send().await?.error_for_status()?;
             let mut buffer = Vec::new();
-            let mut mode = None;
+            let mut is_reasoning = None;
 
             while let Some(chunk) = response.chunk().await? {
                 buffer.extend(chunk);
@@ -437,20 +437,24 @@ impl Assistant {
 
                         if let Some(choice) = data.choices.first_mut() {
                             if let Some(content) = &mut choice.delta.content {
-                                match mode {
+                                match is_reasoning {
                                     None if content.contains("<think>") => {
-                                        mode = Some(Mode::Reasoning);
+                                        is_reasoning = Some(true);
                                         *content = content.replace("<think>", "");
                                     }
-                                    Some(Mode::Reasoning) if content.contains("</think>") => {
-                                        mode = Some(Mode::Talking);
+                                    Some(true) if content.contains("</think>") => {
+                                        is_reasoning = Some(false);
                                         *content = content.replace("</think>", "");
                                     }
                                     _ => {}
                                 }
 
                                 let _ = sender
-                                    .send((mode.unwrap_or(Mode::Talking), content.clone()))
+                                    .send(if is_reasoning.unwrap_or_default() {
+                                        Token::Reasoning(content.clone())
+                                    } else {
+                                        Token::Talking(content.clone())
+                                    })
                                     .await;
                             }
                         }
@@ -535,10 +539,10 @@ pub struct Reasoning {
     pub duration: Duration,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Mode {
-    Reasoning,
-    Talking,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Token {
+    Reasoning(String),
+    Talking(String),
 }
 
 #[derive(Debug)]
