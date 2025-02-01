@@ -8,8 +8,7 @@ on:
 permissions:
   packages: write
 jobs:
-  push_to_registry:
-    name: rocm
+  rocm:
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
