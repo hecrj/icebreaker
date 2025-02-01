@@ -10,10 +10,10 @@ permissions:
 jobs:
   rocm:
     runs-on: ubuntu-22.04
-    env:
-      LLAMACPP_VERSION: b4600
     strategy:
       fail-fast: false
+      matrix:
+        version: [b4600]
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -42,11 +42,11 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
-            ghcr.io/${{ github.repository }}:server-rocm-${{ env.LLAMACPP_VERSION }}
+            ghcr.io/${{ github.repository }}:server-rocm-${{ matrix.version }}
           file: docker/rocm.Dockerfile
           target: server
           build-args: |
-            LLAMACPP_VERSION=${{ env.LLAMACPP_VERSION }}
+            LLAMACPP_VERSION=${{ matrix.version }}
           provenance: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
