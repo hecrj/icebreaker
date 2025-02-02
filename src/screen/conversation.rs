@@ -11,10 +11,10 @@ use iced::task::{self, Task};
 use iced::time::{self, Duration, Instant};
 use iced::widget::{
     self, bottom, bottom_center, button, center, center_x, center_y, column, container,
-    horizontal_space, hover, markdown, progress_bar, right, right_center, row, scrollable, stack,
-    text, text_editor, tooltip, value, vertical_rule, vertical_space, Text,
+    horizontal_space, hover, markdown, pop, progress_bar, right, right_center, row, scrollable,
+    stack, text, text_editor, tooltip, value, vertical_rule, vertical_space, Text,
 };
-use iced::{Center, Element, Fill, Font, Rectangle, Shrink, Subscription, Theme};
+use iced::{Center, Element, Fill, Font, Shrink, Size, Subscription, Theme};
 
 pub struct Conversation {
     backend: Backend,
@@ -50,7 +50,7 @@ pub enum Message {
     Booting(Result<BootEvent, Error>),
     Tick(Instant),
     InputChanged(text_editor::Action),
-    InputMeasured(Option<Rectangle>),
+    InputResized(Size),
     Submit,
     Chatting(Result<chat::Event, Error>),
     Copy(String),
@@ -103,7 +103,6 @@ impl Conversation {
                 boot,
                 Task::perform(Chat::list(), Message::ChatsListed),
                 widget::focus_next(),
-                measure_input(),
                 snap_chat_to_end(),
             ]),
         )
@@ -189,12 +188,10 @@ impl Conversation {
                 self.input.perform(action);
                 self.error = None;
 
-                Action::Run(measure_input())
+                Action::None
             }
-            Message::InputMeasured(bounds) => {
-                if let Some(bounds) = bounds {
-                    self.input_height = bounds.height;
-                }
+            Message::InputResized(bounds) => {
+                self.input_height = bounds.height;
 
                 Action::None
             }
@@ -353,11 +350,7 @@ impl Conversation {
                         self.history = History::restore(chat.history);
                         self.input = text_editor::Content::new();
 
-                        Action::Run(Task::batch([
-                            widget::focus_next(),
-                            snap_chat_to_end(),
-                            measure_input(),
-                        ]))
+                        Action::Run(Task::batch([widget::focus_next(), snap_chat_to_end()]))
                     }
                     State::Running { assistant, sending } if assistant.file() == &chat.file => {
                         self.id = Some(chat.id);
@@ -613,7 +606,11 @@ impl Conversation {
 
         let chat = stack![
             column![header, messages].spacing(10).align_x(Center),
-            bottom_center(container(input).id(INPUT)),
+            bottom_center(
+                pop(input)
+                    .on_show(Message::InputResized)
+                    .on_resize(Message::InputResized)
+            ),
         ];
 
         if self.sidebar_open {
@@ -941,12 +938,7 @@ impl From<assistant::Reasoning> for Reasoning {
     }
 }
 
-const INPUT: &str = "input";
 const CHAT: &str = "chat";
-
-fn measure_input() -> Task<Message> {
-    container::visible_bounds(INPUT).map(Message::InputMeasured)
-}
 
 fn snap_chat_to_end() -> Task<Message> {
     scrollable::snap_to(CHAT, scrollable::RelativeOffset::END)
