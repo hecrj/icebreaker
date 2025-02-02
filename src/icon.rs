@@ -1,5 +1,5 @@
 // Generated automatically by iced_fontello at build time.
-// Do not edit manually.
+// Do not edit manually. Source: ../fonts/icebreaker-icons.toml
 // d0532da8de7e85e9222f7c911baa104de985f1b7f84f01e82bf71feb9968acce
 use iced::widget::{text, Text};
 use iced::Font;
