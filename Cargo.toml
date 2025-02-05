@@ -9,7 +9,7 @@ repository = "https://github.com/hecrj/icebreaker"
 
 [dependencies]
 iced.git = "https://github.com/hecrj/iced.git"
-iced.rev = "0c0651de5b1722194d48c19cd645e747fb72ccb6"
+iced.rev = "4bbb5cbc1f8b2a0ee8e09be18071368df3ba5bbd"
 iced.features = ["tokio", "svg", "markdown", "highlighter", "system", "web-colors", "debug"]
 
 tokio.version = "1.38"

@@ -1,6 +1,6 @@
 // Generated automatically by iced_fontello at build time.
 // Do not edit manually. Source: ../fonts/icebreaker-icons.toml
-// d0532da8de7e85e9222f7c911baa104de985f1b7f84f01e82bf71feb9968acce
+// 7eae0381e077a3f30ca1d09a78769f48e794f984dade7f6d777793faa4fde3ca
 use iced::widget::{text, Text};
 use iced::Font;
 
@@ -19,7 +19,7 @@ pub fn chat<'a>() -> Text<'a> {
 }
 
 pub fn clipboard<'a>() -> Text<'a> {
-    icon("\u{1F4CB}")
+    icon("\u{F0C5}")
 }
 
 pub fn clock<'a>() -> Text<'a> {
@@ -43,7 +43,7 @@ pub fn heart<'a>() -> Text<'a> {
 }
 
 pub fn refresh<'a>() -> Text<'a> {
-    icon("\u{E760}")
+    icon("\u{E01E}")
 }
 
 pub fn trash<'a>() -> Text<'a> {

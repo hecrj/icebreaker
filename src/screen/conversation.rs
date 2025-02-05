@@ -771,12 +771,7 @@ impl Item {
                 content_markdown,
                 ..
             } => {
-                let message = markdown(
-                    content_markdown.items(),
-                    markdown::Settings::default(),
-                    markdown::Style::from_palette(theme.palette()),
-                )
-                .map(Message::LinkClicked);
+                let message = markdown::view_with(content_markdown.items(), theme, &MarkdownViewer);
 
                 let message: Element<_> = if let Some(reasoning) = reasoning {
                     let toggle = button(
@@ -840,25 +835,18 @@ impl Item {
                 markdown: content, ..
             } => {
                 let message = container(
-                    container(
-                        markdown(
-                            content,
-                            markdown::Settings::default(),
-                            markdown::Style::from_palette(theme.palette()),
-                        )
-                        .map(Message::LinkClicked),
-                    )
-                    .style(|theme: &Theme| {
-                        let palette = theme.extended_palette();
+                    container(markdown::view_with(content, theme, &MarkdownViewer))
+                        .style(|theme: &Theme| {
+                            let palette = theme.extended_palette();
 
-                        container::Style {
-                            background: Some(palette.background.weak.color.into()),
-                            text_color: Some(palette.background.weak.text),
-                            border: border::rounded(10),
-                            ..container::Style::default()
-                        }
-                    })
-                    .padding(10),
+                            container::Style {
+                                background: Some(palette.background.weak.color.into()),
+                                text_color: Some(palette.background.weak.text),
+                                border: border::rounded(10),
+                                ..container::Style::default()
+                            }
+                        })
+                        .padding(10),
                 )
                 .padding(padding::all(20).left(30).right(0));
 
@@ -957,4 +945,36 @@ fn action<'a>(
         label,
         tip::Position::Bottom,
     )
+}
+
+struct MarkdownViewer;
+
+impl<'a> markdown::Viewer<'a, Message> for MarkdownViewer {
+    fn on_link_click(url: markdown::Url) -> Message {
+        Message::LinkClicked(url)
+    }
+
+    fn code_block(
+        &self,
+        settings: markdown::Settings,
+        _language: Option<&'a str>,
+        code: &'a str,
+        lines: &'a [markdown::Text],
+    ) -> Element<'a, Message> {
+        let code_block = markdown::code_block(settings, lines, Message::LinkClicked);
+
+        let copy = tip(
+            button(icon::clipboard().size(14))
+                .padding(2)
+                .on_press_with(|| Message::Copy(code.to_owned()))
+                .style(button::text),
+            "Copy",
+            tip::Position::Bottom,
+        );
+
+        hover(
+            code_block,
+            right(container(copy).style(container::dark)).padding(settings.code_size / 2),
+        )
+    }
 }

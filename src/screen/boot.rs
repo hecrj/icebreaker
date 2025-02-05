@@ -6,7 +6,7 @@ use iced::widget::{
     button, center, column, container, horizontal_space, markdown, pick_list, rich_text, row,
     scrollable, span, text, toggler,
 };
-use iced::{Center, Element, Fill, Font, Task, Theme};
+use iced::{never, Center, Element, Fill, Font, Task, Theme};
 
 pub struct Boot {
     model: Model,
@@ -150,24 +150,16 @@ impl Boot {
         };
 
         let readme: Element<_> = if self.readme.is_empty() {
-            center(rich_text![
-                "Loading ",
-                span("README").font(Font::MONOSPACE),
-                "..."
-            ])
+            center(
+                rich_text!["Loading ", span("README").font(Font::MONOSPACE), "..."]
+                    .on_link_click(never),
+            )
             .into()
         } else {
-            scrollable(
-                markdown(
-                    &self.readme,
-                    markdown::Settings::default(),
-                    markdown::Style::from_palette(theme.palette()),
-                )
-                .map(Message::LinkClicked),
-            )
-            .spacing(10)
-            .height(Fill)
-            .into()
+            scrollable(markdown(&self.readme, theme).map(Message::LinkClicked))
+                .spacing(10)
+                .height(Fill)
+                .into()
         };
 
         center(
