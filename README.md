@@ -22,6 +22,8 @@ No pre-built binaries yet! Use `cargo` to try it out:
 cargo install --git https://github.com/hecrj/icebreaker.git
 ```
 
+Additional llama.cpp flags can be added by setting the `ICEBREAKER_LLAMA_ARGS` environment variable.
+
 You also need either [`llama.cpp@66ee4f2`] or [Docker] installed, for now.
 
 [`llama.cpp@66ee4f2`]: https://github.com/ggerganov/llama.cpp/tree/66ee4f297cff3c7ce98b31dbc0ce909d41b9e40
