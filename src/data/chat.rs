@@ -1,25 +1,34 @@
 mod schema;
 
-use crate::data::assistant::{self, Assistant, Message};
+use crate::data::assistant::{self, Assistant, Reply, Token};
 use crate::data::chat::schema::Schema;
+use crate::data::model;
+use crate::data::plan::{self, Plan};
 use crate::data::Error;
 
 use futures::{SinkExt, Stream, StreamExt};
 use serde::{Deserialize, Serialize};
+use sipper::Sender;
 use tokio::fs;
 use tokio::task;
 use uuid::Uuid;
 
 use std::io;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone)]
 pub struct Chat {
     pub id: Id,
-    pub file: assistant::File,
+    pub file: model::File,
     pub title: Option<String>,
-    pub history: Vec<Message>,
+    pub history: Vec<Item>,
+}
+
+#[derive(Debug, Clone)]
+pub enum Item {
+    User(String),
+    Reply(Reply),
+    Plan(Plan),
 }
 
 impl Chat {
@@ -43,7 +52,11 @@ impl Chat {
             id,
             file: schema.file,
             title: schema.title,
-            history: schema.history.into_iter().map(Message::from).collect(),
+            history: schema
+                .history
+                .into_iter()
+                .map(schema::Message::to_data)
+                .collect(),
         })
     }
 
@@ -54,9 +67,9 @@ impl Chat {
     }
 
     pub async fn create(
-        file: assistant::File,
+        file: model::File,
         title: Option<String>,
-        history: Vec<Message>,
+        history: Vec<Item>,
     ) -> Result<Self, Error> {
         let id = Id(Uuid::new_v4());
         let chat = Self::save(id, file, title, history).await?;
@@ -75,9 +88,9 @@ impl Chat {
 
     pub async fn save(
         id: Id,
-        file: assistant::File,
+        file: model::File,
         title: Option<String>,
-        history: Vec<Message>,
+        history: Vec<Item>,
     ) -> Result<Self, Error> {
         if let Ok(current) = Self::fetch(id).await {
             if current.title != title {
@@ -95,7 +108,11 @@ impl Chat {
             id,
             file,
             title,
-            history: history.iter().cloned().map(schema::Message::from).collect(),
+            history: history
+                .iter()
+                .cloned()
+                .map(schema::Message::from_data)
+                .collect(),
         };
 
         let (bytes, chat) =
@@ -138,148 +155,110 @@ impl Chat {
 
 #[derive(Debug, Clone)]
 pub enum Event {
-    MessageSent(Message),
-    MessageAdded,
-    LastMessageChanged {
-        reasoning: Option<assistant::Reasoning>,
-        content: String,
-        new_token: assistant::Token,
-    },
+    ReplyAdded,
+    ReplyChanged { reply: Reply, new_token: Token },
+    PlanAdded,
+    PlanChanged(plan::Event),
     ExchangeOver,
-    TitleChanged(String),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Content(String);
+const SYSTEM_PROMPT: &str = "You are a helpful assistant.";
 
-impl Content {
-    pub fn parse(content: &str) -> Option<Self> {
-        let content = content.trim();
-
-        if content.is_empty() {
-            return None;
-        }
-
-        Some(Self(content.to_owned()))
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Strategy {
+    pub search: bool,
 }
 
 pub fn complete(
     assistant: &Assistant,
-    mut messages: Vec<Message>,
+    items: &[Item],
+    strategy: Strategy,
 ) -> impl Stream<Item = Result<Event, Error>> {
-    const SYSTEM_PROMPT: &str = "You are a helpful assistant.";
-
     let assistant = assistant.clone();
+    let history = history(items);
 
-    iced::stream::try_channel(1, |mut sender| async move {
-        let mut reasoning = String::new();
-        let mut reasoning_started_at: Option<Instant> = None;
-        let mut reasoning_duration = Duration::ZERO;
-        let mut content = String::new();
+    // TODO
+    iced::stream::try_channel(1, move |sender| async move {
+        let mut sender = Sender::new(sender);
 
-        let _ = sender.send(Event::MessageAdded).await;
+        if strategy.search {
+            let _ = sender.send(Event::PlanAdded).await;
 
-        {
-            let mut next_message = assistant.complete(SYSTEM_PROMPT, &messages).boxed();
-
-            while let Some(token) = next_message.next().await.transpose()? {
-                match &token {
-                    assistant::Token::Reasoning(token) => {
-                        reasoning.push_str(token);
-
-                        if let Some(reasoning_started_at) = reasoning_started_at {
-                            reasoning_duration = reasoning_started_at.elapsed();
-                        } else {
-                            reasoning_started_at = Some(Instant::now());
-                        }
-                    }
-                    assistant::Token::Talking(token) => {
-                        content.push_str(token);
-                    }
-                }
-
-                let _ = sender
-                    .send(Event::LastMessageChanged {
-                        reasoning: reasoning_started_at
-                            .is_some()
-                            .then(|| assistant::Reasoning {
-                                content: reasoning.trim().to_owned(),
-                                duration: reasoning_duration,
-                            }),
-                        content: content.trim().to_owned(),
-                        new_token: token,
-                    })
-                    .await;
-            }
+            Plan::search(&assistant, &history, &mut sender.map(Event::PlanChanged)).await?
+        } else {
+            reply(&assistant, &history, &mut sender).await?;
         }
 
-        // Suggest a title after the 1st and 5th messages
-        if messages.len() == 1 || messages.len() == 5 {
-            messages.push(Message::Assistant {
-                reasoning: None,
-                content: content.trim().to_owned(),
-            });
-            messages.push(Message::User(
-                "Give me a short title for our conversation so far, without considering this interaction. \
-                    Just the title between quotes; don't say anything else."
-                    .to_owned(),
-            ));
-
-            let mut title_suggestion = assistant.complete(SYSTEM_PROMPT, &messages).boxed();
-            let mut title = String::new();
-
-            while let Some(token) = title_suggestion.next().await.transpose()? {
-                if let assistant::Token::Talking(token) = token {
-                    title.push_str(&token);
-
-                    if title.len() > 80 {
-                        title.push_str("...");
-                    }
-
-                    let _ = sender
-                        .send(Event::TitleChanged(
-                            title.trim().trim_matches('"').to_owned(),
-                        ))
-                        .await;
-
-                    if title.len() > 80 {
-                        break;
-                    }
-                }
-            }
-        }
-
-        let _ = sender.send(Event::ExchangeOver).await;
+        sender.send(Event::ExchangeOver).await;
 
         Ok(())
     })
 }
 
-pub fn send(
-    assistant: &Assistant,
-    mut history: Vec<Message>,
-    message: Content,
-) -> impl Stream<Item = Result<Event, Error>> {
-    let assistant = assistant.clone();
-    let message = message.as_str().to_owned();
+async fn reply<'a>(
+    assistant: &'a Assistant,
+    messages: &'a [assistant::Message],
+    sender: &mut Sender<Event>,
+) -> Result<(), Error> {
+    let _ = sender.send(Event::ReplyAdded).await;
 
-    iced::stream::try_channel(1, |mut sender| async move {
-        history.push(Message::User(message.clone()));
+    let _reply = assistant
+        .reply(
+            SYSTEM_PROMPT,
+            messages,
+            &[],
+            &mut sender.map(|(reply, new_token)| Event::ReplyChanged { reply, new_token }),
+        )
+        .await;
+
+    Ok(())
+}
+
+#[derive(Debug, Clone)]
+pub enum Title {
+    Partial(String),
+    Complete(String),
+}
+
+pub fn title(assistant: &Assistant, items: &[Item]) -> impl Stream<Item = Result<Title, Error>> {
+    let assistant = assistant.clone();
+    let history = history(&items);
+
+    iced::stream::try_channel(1, move |mut sender| async move {
+        let request = [assistant::Message::User(
+            "Give me a short title for our conversation so far, \
+                    without considering this interaction. \
+                    Just the title between quotes; don't say anything else."
+                .to_owned(),
+        )];
+
+        let mut title_suggestion = assistant
+            .complete(SYSTEM_PROMPT, &history, &request)
+            .boxed();
+
+        let mut title = String::new();
+
+        while let Some(token) = title_suggestion.next().await.transpose()? {
+            if let Token::Talking(token) = token {
+                title.push_str(&token);
+
+                if title.len() > 80 {
+                    title.push_str("...");
+                }
+
+                let _ = sender
+                    .send(Title::Partial(title.trim().trim_matches('"').to_owned()))
+                    .await;
+
+                if title.len() > 80 {
+                    break;
+                }
+            }
+        }
 
         let _ = sender
-            .send(Event::MessageSent(Message::User(message)))
+            .send(Title::Complete(title.trim().trim_matches('"').to_owned()))
             .await;
-
-        let mut task = complete(&assistant, history).boxed();
-
-        while let Some(result) = task.next().await {
-            let _ = sender.send(result?).await;
-        }
 
         Ok(())
     })
@@ -291,7 +270,7 @@ pub struct Id(Uuid);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Entry {
     pub id: Id,
-    pub file: assistant::File,
+    pub file: model::File,
     pub title: Option<String>,
 }
 
@@ -383,4 +362,15 @@ async fn storage_dir() -> Result<PathBuf, io::Error> {
     fs::create_dir_all(&directory).await?;
 
     Ok(directory)
+}
+
+fn history(items: &[Item]) -> Vec<assistant::Message> {
+    items
+        .iter()
+        .filter_map(|item| match item {
+            Item::User(query) => Some(assistant::Message::User(query.clone())),
+            Item::Reply(reply) => Some(assistant::Message::Assistant(reply.content.clone())),
+            Item::Plan(_plan) => None,
+        })
+        .collect()
 }

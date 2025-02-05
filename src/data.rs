@@ -1,7 +1,12 @@
 pub mod assistant;
 pub mod chat;
+pub mod model;
+pub mod plan;
 
 pub use chat::Chat;
+pub use model::Model;
+pub use plan::Plan;
+pub use url::Url;
 
 use std::io;
 use std::sync::Arc;

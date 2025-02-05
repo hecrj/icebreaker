@@ -1,6 +1,6 @@
 // Generated automatically by iced_fontello at build time.
 // Do not edit manually. Source: ../fonts/icebreaker-icons.toml
-// 7eae0381e077a3f30ca1d09a78769f48e794f984dade7f6d777793faa4fde3ca
+// 8635546ae4b9c1012cc1496d95ccfb5f2589eabdb70d3d8819771a3b8a355ba3
 use iced::widget::{text, Text};
 use iced::Font;
 
@@ -36,6 +36,10 @@ pub fn download<'a>() -> Text<'a> {
 
 pub fn expand<'a>() -> Text<'a> {
     icon("\u{F152}")
+}
+
+pub fn globe<'a>() -> Text<'a> {
+    icon("\u{E02F}")
 }
 
 pub fn heart<'a>() -> Text<'a> {

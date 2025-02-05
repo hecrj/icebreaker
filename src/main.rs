@@ -16,6 +16,8 @@ use iced::system;
 use iced::{Element, Subscription, Task, Theme};
 
 pub fn main() -> iced::Result {
+    tracing_subscriber::fmt::init();
+
     iced::application(Icebreaker::title, Icebreaker::update, Icebreaker::view)
         .font(icon::FONT)
         .subscription(Icebreaker::subscription)

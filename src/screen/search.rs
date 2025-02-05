@@ -1,5 +1,4 @@
-use crate::data::assistant::Model;
-use crate::data::Error;
+use crate::data::{Error, Model};
 use crate::icon;
 
 use iced::time::Duration;

@@ -1,5 +1,8 @@
 use crate::data::assistant;
-use crate::data::chat::Id;
+use crate::data::chat::{Id, Item};
+use crate::data::model;
+use crate::data::plan;
+use crate::data::{self, Url};
 
 use futures::never::Never;
 use serde::de::{self, Deserializer, Error, MapAccess, Visitor};
@@ -13,7 +16,7 @@ use std::time::Duration;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Schema {
     pub id: Id,
-    pub file: assistant::File,
+    pub file: model::File,
     pub title: Option<String>,
     pub history: Vec<Message>,
 }
@@ -21,58 +24,80 @@ pub struct Schema {
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Message {
     User(String),
-    #[serde(deserialize_with = "string_or_struct")]
-    Assistant(AssistantMessage),
+    #[serde(rename = "Assistant", deserialize_with = "string_or_struct")]
+    Reply(Reply),
+    Plan(Plan),
 }
 
-impl From<assistant::Message> for Message {
-    fn from(message: assistant::Message) -> Self {
-        match message {
-            assistant::Message::User(content) => Message::User(content),
-            assistant::Message::Assistant { reasoning, content } => {
-                Message::Assistant(AssistantMessage {
-                    reasoning: reasoning
-                        .as_ref()
-                        .map(|reasoning| reasoning.content.clone())
-                        .unwrap_or_default(),
-                    reasoning_time: reasoning
-                        .map(|reasoning| reasoning.duration)
-                        .unwrap_or_default(),
-                    content,
-                })
-            }
+impl Message {
+    pub fn from_data(item: Item) -> Self {
+        match item {
+            Item::User(content) => Message::User(content),
+            Item::Reply(reply) => Message::Reply(Reply {
+                reasoning: reply
+                    .reasoning
+                    .as_ref()
+                    .map(|reasoning| reasoning.content.clone())
+                    .unwrap_or_default(),
+                reasoning_time: reply
+                    .reasoning
+                    .map(|reasoning| reasoning.duration)
+                    .unwrap_or_default(),
+                content: reply.content,
+            }),
+            Item::Plan(plan) => Message::Plan(Plan::from_data(plan)),
+        }
+    }
+
+    pub fn to_data(self) -> Item {
+        match self {
+            Message::User(content) => Item::User(content),
+            Message::Reply(reply) => Item::Reply(reply.to_data()),
+            Message::Plan(plan) => Item::Plan(plan.to_data()),
         }
     }
 }
 
-impl From<Message> for assistant::Message {
-    fn from(message: Message) -> Self {
-        match message {
-            Message::User(content) => assistant::Message::User(content),
-            Message::Assistant(message) => assistant::Message::Assistant {
-                reasoning: if message.reasoning.is_empty() {
-                    None
-                } else {
-                    Some(assistant::Reasoning {
-                        content: message.reasoning,
-                        duration: message.reasoning_time,
-                    })
-                },
-                content: message.content,
-            },
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct AssistantMessage {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Reply {
     reasoning: String,
     #[serde(default)]
     reasoning_time: Duration,
     content: String,
 }
 
-impl FromStr for AssistantMessage {
+impl Reply {
+    fn from_data(reply: assistant::Reply) -> Self {
+        Reply {
+            reasoning: reply
+                .reasoning
+                .as_ref()
+                .map(|reasoning| reasoning.content.clone())
+                .unwrap_or_default(),
+            reasoning_time: reply
+                .reasoning
+                .map(|reasoning| reasoning.duration)
+                .unwrap_or_default(),
+            content: reply.content,
+        }
+    }
+
+    fn to_data(self) -> assistant::Reply {
+        assistant::Reply {
+            reasoning: if self.reasoning.is_empty() {
+                None
+            } else {
+                Some(assistant::Reasoning {
+                    content: self.reasoning,
+                    duration: self.reasoning_time,
+                })
+            },
+            content: self.content,
+        }
+    }
+}
+
+impl FromStr for Reply {
     type Err = Never;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -81,6 +106,153 @@ impl FromStr for AssistantMessage {
             reasoning_time: Duration::default(),
             content: s.to_owned(),
         })
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Reasoning {
+    content: String,
+    duration: Duration,
+}
+
+impl Reasoning {
+    fn from_data(reasoning: assistant::Reasoning) -> Self {
+        Self {
+            content: reasoning.content,
+            duration: reasoning.duration,
+        }
+    }
+
+    fn to_data(self) -> assistant::Reasoning {
+        assistant::Reasoning {
+            content: self.content,
+            duration: self.duration,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Plan {
+    #[serde(default)]
+    reasoning: Option<Reasoning>,
+    #[serde(default)]
+    steps: Vec<Step>,
+    #[serde(default)]
+    outcomes: Vec<Outcome>,
+}
+
+impl Plan {
+    fn from_data(plan: data::Plan) -> Self {
+        Self {
+            reasoning: plan.reasoning.map(Reasoning::from_data),
+            steps: plan.steps.into_iter().map(Step::from_data).collect(),
+            outcomes: plan
+                .execution
+                .outcomes
+                .into_iter()
+                .map(Outcome::from_data)
+                .collect(),
+        }
+    }
+
+    fn to_data(self) -> data::Plan {
+        data::Plan {
+            reasoning: self.reasoning.map(Reasoning::to_data),
+            steps: self.steps.into_iter().map(Step::to_data).collect(),
+            execution: plan::Execution {
+                outcomes: self.outcomes.into_iter().map(Outcome::to_data).collect(),
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Step {
+    pub evidence: String,
+    pub description: String,
+    pub function: String,
+    pub inputs: Vec<String>,
+}
+
+impl Step {
+    fn from_data(step: plan::Step) -> Self {
+        Self {
+            evidence: step.evidence,
+            description: step.description,
+            function: step.function,
+            inputs: step.inputs,
+        }
+    }
+
+    fn to_data(self) -> plan::Step {
+        plan::Step {
+            evidence: self.evidence,
+            description: self.description,
+            function: self.function,
+            inputs: self.inputs,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Outcome {
+    Search(Status<Vec<Url>>),
+    ScrapeText(Status<Vec<String>>),
+    Answer(Status<Reply>),
+}
+
+impl Outcome {
+    fn from_data(outcome: plan::Outcome) -> Self {
+        match outcome {
+            plan::Outcome::Search(status) => Self::Search(Status::from_data(status)),
+            plan::Outcome::ScrapeText(status) => Self::ScrapeText(Status::from_data(status)),
+            plan::Outcome::Answer(status) => {
+                Self::Answer(Status::from_data(status.map(Reply::from_data)))
+            }
+        }
+    }
+
+    fn to_data(self) -> plan::Outcome {
+        match self {
+            Self::Search(status) => plan::Outcome::Search(Status::to_data(status)),
+            Self::ScrapeText(status) => plan::Outcome::ScrapeText(Status::to_data(status)),
+            Self::Answer(status) => {
+                plan::Outcome::Answer(Status::to_data(status.map(Reply::to_data)))
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Status<T> {
+    Active(T),
+    Done(T),
+    Errored(String),
+}
+
+impl<T> Status<T> {
+    fn from_data(status: plan::Status<T>) -> Self {
+        match status {
+            plan::Status::Active(value) => Status::Active(value),
+            plan::Status::Done(value) => Status::Done(value),
+            plan::Status::Errored(error) => Status::Errored(error),
+        }
+    }
+
+    fn to_data(self) -> plan::Status<T> {
+        match self {
+            Status::Active(value) => plan::Status::Active(value),
+            Status::Done(value) => plan::Status::Done(value),
+            Status::Errored(error) => plan::Status::Errored(error),
+        }
+    }
+
+    fn map<A>(self, f: impl FnOnce(T) -> A) -> Status<A> {
+        match self {
+            Status::Active(value) => Status::Active(f(value)),
+            Status::Done(value) => Status::Done(f(value)),
+            Status::Errored(error) => Status::Errored(error),
+        }
     }
 }
 

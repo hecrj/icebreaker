@@ -8,8 +8,9 @@ license = "MIT"
 repository = "https://github.com/hecrj/icebreaker"
 
 [dependencies]
-iced.git = "https://github.com/hecrj/iced.git"
-iced.rev = "4bbb5cbc1f8b2a0ee8e09be18071368df3ba5bbd"
+# iced.git = "https://github.com/hecrj/iced.git"
+# iced.rev = "4bbb5cbc1f8b2a0ee8e09be18071368df3ba5bbd"
+iced.path = "../../iced"
 iced.features = ["tokio", "svg", "markdown", "highlighter", "system", "web-colors", "debug"]
 
 tokio.version = "1.38"
@@ -19,7 +20,7 @@ tokio-stream.version = "0.1"
 tokio-stream.features = ["io-util"]
 
 reqwest.version = "0.12"
-reqwest.features = ["json", "socks"]
+reqwest.features = ["json", "socks", "rustls-tls"]
 
 serde.version = "1.0"
 serde.features = ["derive"]
@@ -30,12 +31,18 @@ chrono.features = ["serde"]
 uuid.version = "1.10"
 uuid.features = ["v4", "serde"]
 
+sipper.path = "../../sipper"
+
+tracing-subscriber = "0.3"
 dirs-next = "2.0"
 futures = "0.3"
 itertools = "0.13"
+log = "0.4"
 open = "5.2"
+scraper = "0.22"
 serde_json = "1.0"
 thiserror = "1.0"
+url = "2.5"
 
 [build-dependencies]
 iced_fontello = "0.13"

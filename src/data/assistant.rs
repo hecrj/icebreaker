@@ -1,20 +1,21 @@
+use crate::data::model;
 use crate::data::Error;
 
 use futures::channel::mpsc;
 use futures::{FutureExt, SinkExt, Stream, StreamExt};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
+use sipper::Sender;
 use tokio::fs;
 use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt};
 use tokio::process;
 
-use std::fmt;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone)]
 pub struct Assistant {
-    file: File,
+    file: model::File,
     _server: Arc<Server>,
 }
 
@@ -26,7 +27,10 @@ impl Assistant {
     const MODELS_DIR: &'static str = "./models";
     const HOST_PORT: u64 = 8080;
 
-    pub fn boot(file: File, backend: Backend) -> impl Stream<Item = Result<BootEvent, Error>> {
+    pub fn boot(
+        file: model::File,
+        backend: Backend,
+    ) -> impl Stream<Item = Result<BootEvent, Error>> {
         #[derive(Clone)]
         struct Sender(mpsc::Sender<BootEvent>);
 
@@ -371,10 +375,67 @@ impl Assistant {
         })
     }
 
+    pub async fn reply(
+        &self,
+        prompt: &str,
+        messages: &[Message],
+        append: &[Message],
+        sender: &mut Sender<(Reply, Token)>,
+    ) -> Result<Reply, Error> {
+        let mut reasoning = None;
+        let mut reasoning_started_at: Option<Instant> = None;
+        let mut content = String::new();
+        let mut reasoning_content = String::new();
+        let mut next_token = self.complete(prompt, messages, append).boxed();
+
+        while let Some(token) = next_token.next().await.transpose()? {
+            match &token {
+                Token::Reasoning(token) => {
+                    reasoning = {
+                        let mut reasoning = reasoning.take().unwrap_or_else(|| Reasoning {
+                            content: String::new(),
+                            duration: Duration::ZERO,
+                        });
+
+                        if let Some(reasoning_started_at) = reasoning_started_at {
+                            reasoning.duration = reasoning_started_at.elapsed();
+                        } else {
+                            reasoning_started_at = Some(Instant::now());
+                        }
+
+                        reasoning_content.push_str(token);
+                        reasoning.content = reasoning_content.trim().to_owned();
+
+                        Some(reasoning)
+                    };
+                }
+                Token::Talking(token) => {
+                    content.push_str(token);
+                }
+            }
+
+            let _ = sender
+                .send((
+                    Reply {
+                        reasoning: reasoning.clone(),
+                        content: content.trim().to_owned(),
+                    },
+                    token,
+                ))
+                .await;
+        }
+
+        Ok(Reply {
+            reasoning: reasoning.clone(),
+            content: content.trim().to_owned(),
+        })
+    }
+
     pub fn complete<'a>(
         &'a self,
         system_prompt: &'a str,
         messages: &'a [Message],
+        append: &'a [Message],
     ) -> impl Stream<Item = Result<Token, Error>> + 'a {
         iced::stream::try_channel(1, move |mut sender| async move {
             let client = reqwest::Client::new();
@@ -382,10 +443,7 @@ impl Assistant {
             let request = {
                 let messages: Vec<_> = [("system", system_prompt)]
                     .into_iter()
-                    .chain(messages.iter().map(|message| match message {
-                        Message::Assistant { content, .. } => ("assistant", content.as_str()),
-                        Message::User(content) => ("user", content.as_str()),
-                    }))
+                    .chain(messages.iter().chain(append).map(Message::to_tuple))
                     .map(|(role, content)| {
                         json!({
                             "role": role,
@@ -482,7 +540,7 @@ impl Assistant {
         })
     }
 
-    pub fn file(&self) -> &File {
+    pub fn file(&self) -> &model::File {
         &self.file
     }
 
@@ -492,7 +550,7 @@ impl Assistant {
 
     fn launch_with_executable(
         executable: &'static str,
-        file: &File,
+        file: &model::File,
         backend: Backend,
     ) -> Result<process::Child, Error> {
         let gpu_flags = match backend {
@@ -550,11 +608,25 @@ impl Backend {
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    Assistant {
-        reasoning: Option<Reasoning>,
-        content: String,
-    },
+    System(String),
+    Assistant(String),
     User(String),
+}
+
+impl Message {
+    pub fn to_tuple(&self) -> (&'static str, &str) {
+        match self {
+            Self::System(content) => ("system", content),
+            Self::Assistant(content) => ("assistant", content),
+            Self::User(content) => ("user", content),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Reply {
+    pub reasoning: Option<Reasoning>,
+    pub content: String,
 }
 
 #[derive(Debug, Clone)]
@@ -598,165 +670,4 @@ pub enum BootEvent {
     Progressed { stage: &'static str, percent: u64 },
     Logged(String),
     Finished(Assistant),
-}
-
-#[derive(Debug, Clone)]
-pub struct Model {
-    id: Id,
-    pub last_modified: chrono::DateTime<chrono::Local>,
-    pub downloads: Downloads,
-    pub likes: Likes,
-    pub files: Vec<File>,
-}
-
-impl Model {
-    const HF_URL: &'static str = "https://huggingface.co";
-    const API_URL: &'static str = "https://huggingface.co/api";
-
-    pub async fn list() -> Result<Vec<Self>, Error> {
-        Self::search(String::new()).await
-    }
-
-    pub async fn search(query: String) -> Result<Vec<Self>, Error> {
-        let client = reqwest::Client::new();
-
-        let request = client.get(format!("{}/models", Self::API_URL)).query(&[
-            ("search", query.as_ref()),
-            ("filter", "text-generation"),
-            ("filter", "gguf"),
-            ("limit", "100"),
-            ("full", "true"),
-        ]);
-
-        #[derive(Deserialize)]
-        struct Response {
-            id: Id,
-            #[serde(rename = "lastModified")]
-            last_modified: chrono::DateTime<chrono::Local>,
-            downloads: Downloads,
-            likes: Likes,
-            gated: Gated,
-            siblings: Vec<Sibling>,
-        }
-
-        #[derive(Deserialize, PartialEq, Eq)]
-        #[serde(untagged)]
-        enum Gated {
-            Bool(bool),
-            Other(String),
-        }
-
-        #[derive(Deserialize)]
-        struct Sibling {
-            rfilename: String,
-        }
-
-        let response = request.send().await?;
-        let mut models: Vec<Response> = response.json().await?;
-
-        models.retain(|model| model.gated == Gated::Bool(false));
-
-        Ok(models
-            .into_iter()
-            .map(|model| Self {
-                id: model.id.clone(),
-                last_modified: model.last_modified,
-                downloads: model.downloads,
-                likes: model.likes,
-                files: model
-                    .siblings
-                    .into_iter()
-                    .filter(|file| file.rfilename.ends_with(".gguf"))
-                    .map(|file| File {
-                        model: model.id.clone(),
-                        name: file.rfilename,
-                    })
-                    .collect(),
-            })
-            .collect())
-    }
-
-    pub async fn fetch_readme(self) -> Result<String, Error> {
-        let response = reqwest::get(format!(
-            "{url}/{id}/raw/main/README.md",
-            url = Self::HF_URL,
-            id = self.id.0
-        ))
-        .await?;
-
-        Ok(response.text().await?)
-    }
-
-    pub fn name(&self) -> &str {
-        self.id.name()
-    }
-
-    pub fn author(&self) -> &str {
-        self.id.author()
-    }
-}
-
-impl fmt::Display for Model {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.id.0)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Id(String);
-
-impl Id {
-    pub fn name(&self) -> &str {
-        self.0
-            .split_once('/')
-            .map(|(_author, name)| name)
-            .unwrap_or(&self.0)
-    }
-
-    pub fn author(&self) -> &str {
-        self.0
-            .split_once('/')
-            .map(|(author, _name)| author)
-            .unwrap_or(&self.0)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-pub struct Downloads(u64);
-
-impl fmt::Display for Downloads {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0 {
-            1_000_000.. => {
-                write!(f, "{:.2}M", (self.0 as f32 / 1_000_000_f32))
-            }
-            1_000.. => {
-                write!(f, "{:.2}k", (self.0 as f32 / 1_000_f32))
-            }
-            _ => {
-                write!(f, "{}", self.0)
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-pub struct Likes(u64);
-
-impl fmt::Display for Likes {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct File {
-    pub model: Id,
-    pub name: String,
-}
-
-impl fmt::Display for File {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.name)
-    }
 }
