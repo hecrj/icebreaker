@@ -1057,7 +1057,13 @@ impl Outcome {
     pub fn from_data(outcome: plan::Outcome) -> Self {
         match outcome {
             plan::Outcome::Search(status) => Self::Search(status),
-            plan::Outcome::ScrapeText(status) => Self::ScrapeText(status),
+            plan::Outcome::ScrapeText(status) => Self::ScrapeText(status.map(|sites| {
+                sites
+                    .iter()
+                    .flat_map(|text| text.lines())
+                    .map(str::to_owned)
+                    .collect()
+            })),
             plan::Outcome::Answer(status) => Self::Answer(status.map(Reply::from_data)),
         }
     }
