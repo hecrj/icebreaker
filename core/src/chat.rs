@@ -13,10 +13,11 @@ use tokio::fs;
 use tokio::task;
 use uuid::Uuid;
 
+use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Chat {
     pub id: Id,
     pub file: model::File,
@@ -44,20 +45,26 @@ impl Chat {
 
     pub async fn fetch(id: Id) -> Result<Self, Error> {
         let bytes = fs::read(Self::path(&id).await?).await?;
-        let schema: Schema = task::spawn_blocking(move || serde_json::from_slice(&bytes)).await??;
 
         let _ = LastOpened::update(id).await;
 
-        Ok(Self {
-            id,
-            file: schema.file,
-            title: schema.title,
-            history: schema
+        task::spawn_blocking(move || {
+            let schema: Schema = serde_json::from_slice(&bytes)?;
+
+            let history = schema
                 .history
                 .into_iter()
                 .map(schema::Message::to_data)
-                .collect(),
+                .collect();
+
+            Ok(Self {
+                id,
+                file: schema.file,
+                title: schema.title,
+                history,
+            })
         })
+        .await?
     }
 
     pub async fn fetch_last_opened() -> Result<Self, Error> {
@@ -104,19 +111,21 @@ impl Chat {
             }
         }
 
-        let chat = Schema {
-            id,
-            file,
-            title,
-            history: history
-                .iter()
-                .cloned()
-                .map(schema::Message::from_data)
-                .collect(),
-        };
+        let (bytes, chat, history) = task::spawn_blocking(move || {
+            let chat = Schema {
+                id,
+                file,
+                title,
+                history: history
+                    .iter()
+                    .cloned()
+                    .map(schema::Message::from_data)
+                    .collect(),
+            };
 
-        let (bytes, chat) =
-            task::spawn_blocking(move || (serde_json::to_vec_pretty(&chat), chat)).await?;
+            (serde_json::to_vec_pretty(&chat), chat, history)
+        })
+        .await?;
 
         fs::write(Self::path(&chat.id).await?, bytes?).await?;
 
@@ -150,6 +159,16 @@ impl Chat {
         }
 
         Ok(())
+    }
+}
+
+impl fmt::Debug for Chat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Chat")
+            .field("id", &self.id)
+            .field("file", &self.file)
+            .field("title", &self.title)
+            .finish()
     }
 }
 
