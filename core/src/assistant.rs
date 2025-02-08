@@ -1,13 +1,10 @@
 use crate::model;
+use crate::request;
 use crate::Error;
 
-use futures::Stream;
-use futures::{FutureExt, StreamExt};
 use serde::Deserialize;
 use serde_json::json;
-use sipper::{sipper, Sipper, Straw};
-use tokio::fs;
-use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt};
+use sipper::{sipper, FutureExt, Sipper, Straw, Stream, StreamExt};
 use tokio::process;
 
 use std::sync::Arc;
@@ -31,6 +28,12 @@ impl Assistant {
         file: model::File,
         backend: Backend,
     ) -> impl Stream<Item = Result<BootEvent, Error>> {
+        use tokio::fs;
+        use tokio::io::{self, AsyncBufReadExt};
+        use tokio::process;
+        use tokio::task;
+        use tokio::time;
+
         #[derive(Clone)]
         struct Sender(sipper::Sender<Result<BootEvent, Error>>);
 
@@ -39,7 +42,7 @@ impl Assistant {
                 let _ = self.0.send(Ok(BootEvent::Logged(log))).await;
             }
 
-            async fn progress(&mut self, stage: &'static str, percent: u64) {
+            async fn progress(&mut self, stage: &'static str, percent: u32) {
                 let _ = self
                     .0
                     .send(Ok(BootEvent::Progressed { stage, percent }))
@@ -110,61 +113,42 @@ impl Assistant {
                     ))
                     .await;
 
-                let mut model = io::BufWriter::new(fs::File::create(&model_path).await?);
-
-                let mut download = {
-                    let url = format!(
-                        "https://huggingface.co\
-                            /{id}/resolve/main/\
-                            {filename}?download=true",
-                        id = file.model.0,
-                        filename = file.name
-                    );
-
-                    reqwest::get(url)
-                }
-                .await?;
-
-                let model_size = download.content_length();
-                let mut downloaded = 0;
-                let mut progress = 0;
-                let start = Instant::now();
-
                 sender
                     .log(format!("Downloading {file}...", file = file.name))
                     .await;
 
-                while let Some(chunk) = download.chunk().await? {
-                    downloaded += chunk.len() as u64;
+                let url = format!(
+                    "https://huggingface.co\
+                            /{id}/resolve/main/\
+                            {filename}?download=true",
+                    id = file.model.0,
+                    filename = file.name
+                );
 
-                    let speed = downloaded as f32 / start.elapsed().as_secs_f32();
+                let mut download = request::download_file(url, &model_path).sip();
+                let mut last_percent = None;
 
-                    if let Some(model_size) = model_size {
-                        let new_progress =
-                            (100.0 * downloaded as f32 / model_size as f32).round() as u64;
+                while let Some(progress) = download.next().await {
+                    if let Some((total, percent)) = progress.percent() {
+                        sender.progress("Downloading model...", percent).await;
 
-                        if new_progress > progress {
-                            progress = new_progress;
+                        if Some(percent) != last_percent {
+                            last_percent = Some(percent);
 
-                            sender.progress("Downloading model...", progress).await;
-
-                            if progress % 5 == 0 {
-                                sender
+                            sender
                                 .log(format!(
-                                    "=> {progress}% {downloaded:.2}GB of {model_size:.2}GB @ {speed:.2} MB/s",
-                                    downloaded = downloaded as f32 / 10f32.powi(9),
-                                    model_size = model_size as f32 / 10f32.powi(9),
-                                    speed = speed / 10f32.powi(6),
+                                    "=> {percent}% {downloaded:.2}GB of {total:.2}GB \
+                                    @ {speed:.2} MB/s",
+                                    downloaded = progress.downloaded as f32 / 10f32.powi(9),
+                                    total = total as f32 / 10f32.powi(9),
+                                    speed = progress.speed as f32 / 10f32.powi(6),
                                 ))
                                 .await;
-                            }
                         }
                     }
-
-                    model.write_all(&chunk).await?;
                 }
 
-                model.flush().await?;
+                download.finish().await?;
             }
 
             sender.progress("Detecting executor...", 0).await;
@@ -194,7 +178,7 @@ impl Assistant {
                     ))
                     .await;
 
-                let mut server = Self::launch_with_executable("llama-server", &file, backend)?;
+                let mut server = Server::launch_with_executable("llama-server", &file, backend)?;
                 let stdout = server.stdout.take();
                 let stderr = server.stderr.take();
 
@@ -252,7 +236,7 @@ impl Assistant {
                 };
 
                 let mut docker = process::Command::new("docker")
-                    .args(Self::parse_args(&command))
+                    .args(Server::parse_args(&command))
                     .kill_on_drop(true)
                     .stdout(std::process::Stdio::piped())
                     .stderr(std::process::Stdio::piped())
@@ -272,7 +256,7 @@ impl Assistant {
                     }
                 };
 
-                let _handle = tokio::task::spawn(notify_progress);
+                let _handle = task::spawn(notify_progress);
 
                 let container = {
                     let output = io::BufReader::new(docker.stdout.take().expect("piped stdout"));
@@ -309,21 +293,24 @@ impl Assistant {
                 return Err(Error::NoExecutorAvailable);
             };
 
-            let mut lines = {
-                use futures::stream;
-                use tokio_stream::wrappers::LinesStream;
-
-                let stdout = io::BufReader::new(stdout.expect("piped stdout"));
-                let stderr = io::BufReader::new(stderr.expect("piped stderr"));
-
-                stream::select(
-                    LinesStream::new(stdout.lines()),
-                    LinesStream::new(stderr.lines()),
-                )
-            };
-
             let log_output = {
                 let mut sender = sender.clone();
+
+                let mut lines = {
+                    use futures::stream;
+                    use tokio_stream::wrappers::LinesStream;
+
+                    let stdout = stdout.expect("piped stdout");
+                    let stderr = stderr.expect("piped stderr");
+
+                    let stdout = io::BufReader::new(stdout);
+                    let stderr = io::BufReader::new(stderr);
+
+                    stream::select(
+                        LinesStream::new(stdout.lines()),
+                        LinesStream::new(stderr.lines()),
+                    )
+                };
 
                 async move {
                     while let Some(line) = lines.next().await {
@@ -339,7 +326,7 @@ impl Assistant {
 
             let check_health = async move {
                 loop {
-                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    time::sleep(Duration::from_secs(1)).await;
 
                     if let Ok(response) = reqwest::get(format!(
                         "http://localhost:{port}/health",
@@ -355,11 +342,11 @@ impl Assistant {
             }
             .boxed();
 
-            if futures::future::select(log_output, check_health)
-                .await
-                .factor_first()
-                .0
-            {
+            let log_handle = task::spawn(log_output);
+
+            if check_health.await {
+                log_handle.abort();
+
                 return Ok(BootEvent::Finished(Assistant {
                     file,
                     _server: Arc::new(server),
@@ -544,37 +531,6 @@ impl Assistant {
     pub fn name(&self) -> &str {
         self.file.model.name()
     }
-
-    fn launch_with_executable(
-        executable: &'static str,
-        file: &model::File,
-        backend: Backend,
-    ) -> Result<process::Child, Error> {
-        let gpu_flags = match backend {
-            Backend::Cpu => "",
-            Backend::Cuda | Backend::Rocm => "--gpu-layers 80",
-        };
-
-        let server = process::Command::new(executable)
-            .args(Self::parse_args(&format!(
-                "--model models/{filename} \
-                    --port 8080 --host 0.0.0.0 {gpu_flags}",
-                filename = file.name,
-            )))
-            .kill_on_drop(true)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()?;
-
-        Ok(server)
-    }
-
-    fn parse_args(command: &str) -> impl Iterator<Item = &str> {
-        command
-            .split(' ')
-            .map(str::trim)
-            .filter(|arg| !arg.is_empty())
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -644,6 +600,39 @@ enum Server {
     Process(process::Child),
 }
 
+impl Server {
+    fn launch_with_executable(
+        executable: &'static str,
+        file: &model::File,
+        backend: Backend,
+    ) -> Result<process::Child, Error> {
+        let gpu_flags = match backend {
+            Backend::Cpu => "",
+            Backend::Cuda | Backend::Rocm => "--gpu-layers 80",
+        };
+
+        let server = process::Command::new(executable)
+            .args(Self::parse_args(&format!(
+                "--model models/{filename} \
+                    --port 8080 --host 0.0.0.0 {gpu_flags}",
+                filename = file.name,
+            )))
+            .kill_on_drop(true)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()?;
+
+        Ok(server)
+    }
+
+    fn parse_args(command: &str) -> impl Iterator<Item = &str> {
+        command
+            .split(' ')
+            .map(str::trim)
+            .filter(|arg| !arg.is_empty())
+    }
+}
+
 impl Drop for Server {
     fn drop(&mut self) {
         use std::process;
@@ -664,7 +653,7 @@ impl Drop for Server {
 
 #[derive(Debug, Clone)]
 pub enum BootEvent {
-    Progressed { stage: &'static str, percent: u64 },
+    Progressed { stage: &'static str, percent: u32 },
     Logged(String),
     Finished(Assistant),
 }

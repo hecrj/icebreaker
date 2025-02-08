@@ -6,9 +6,8 @@ use crate::model;
 use crate::plan::{self, Plan};
 use crate::Error;
 
-use futures::Stream;
 use serde::{Deserialize, Serialize};
-use sipper::{sipper, Sipper, Straw};
+use sipper::{sipper, Sipper, Straw, Stream};
 use tokio::fs;
 use tokio::task;
 use uuid::Uuid;

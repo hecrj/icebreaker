@@ -39,7 +39,7 @@ enum State {
         file: File,
         logs: Vec<String>,
         stage: String,
-        progress: u64,
+        progress: u32,
         tick: usize,
         _task: task::Handle,
     },

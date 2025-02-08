@@ -92,7 +92,7 @@ impl Plan {
             };
 
             let plan = design(assistant, &history).run(&progress).await?;
-            let _ = progress.send(Event::Designed(plan.clone())).await;
+            progress.send(Event::Designed(plan.clone())).await;
 
             execute(assistant, &history, query, &plan)
                 .run(progress)

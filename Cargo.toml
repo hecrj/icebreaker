@@ -30,7 +30,7 @@ iced.git = "https://github.com/iced-rs/iced.git"
 iced.rev = "4bbb5cbc1f8b2a0ee8e09be18071368df3ba5bbd"
 
 sipper.git = "https://github.com/hecrj/sipper.git"
-sipper.rev = "ca161524a82e2a181bccc384c07d2fc446655f6b"
+sipper.rev = "c53184fc5517fa027f193ce1ba4c5b40a3b2e18a"
 
 chrono = "0.4"
 dirs = "6.0"
@@ -48,4 +48,3 @@ tokio-stream = "0.1"
 tracing-subscriber = "0.3"
 url = "2.5"
 uuid = "1.10"
-

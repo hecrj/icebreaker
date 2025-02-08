@@ -4139,7 +4139,7 @@ checksum = "56199f7ddabf13fe5074ce809e7d3f42b42ae711800501b5b16ea82ad029c39d"
 [[package]]
 name = "sipper"
 version = "0.0.2"
-source = "git+https://github.com/hecrj/sipper.git?rev=ca161524a82e2a181bccc384c07d2fc446655f6b#ca161524a82e2a181bccc384c07d2fc446655f6b"
+source = "git+https://github.com/hecrj/sipper.git?rev=c53184fc5517fa027f193ce1ba4c5b40a3b2e18a#c53184fc5517fa027f193ce1ba4c5b40a3b2e18a"
 dependencies = [
  "futures",
 ]

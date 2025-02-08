@@ -8,6 +8,8 @@ pub use model::Model;
 pub use plan::Plan;
 pub use url::Url;
 
+mod request;
+
 use std::io;
 use std::sync::Arc;
 use tokio::task;
