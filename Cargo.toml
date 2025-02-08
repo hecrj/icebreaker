@@ -8,41 +8,43 @@ license = "MIT"
 repository = "https://github.com/hecrj/icebreaker"
 
 [dependencies]
+icebreaker_core.workspace = true
+itertools.workspace = true
+open.workspace = true
+tokio.workspace = true
+tracing-subscriber.workspace = true
+
+iced.workspace = true
+iced.features = ["tokio", "svg", "markdown", "highlighter", "system", "web-colors", "debug"]
+
+[build-dependencies]
+iced_fontello = "0.13"
+
+[workspace]
+members = ["core"]
+
+[workspace.dependencies]
+icebreaker_core.path = "./core"
+
 # iced.git = "https://github.com/hecrj/iced.git"
 # iced.rev = "4bbb5cbc1f8b2a0ee8e09be18071368df3ba5bbd"
 iced.path = "../../iced"
-iced.features = ["tokio", "svg", "markdown", "highlighter", "system", "web-colors", "debug"]
-
-tokio.version = "1.38"
-tokio.features = ["fs", "io-util", "process", "time"]
-
-tokio-stream.version = "0.1"
-tokio-stream.features = ["io-util"]
-
-reqwest.version = "0.12"
-reqwest.features = ["json", "socks", "rustls-tls"]
-
-serde.version = "1.0"
-serde.features = ["derive"]
-
-chrono.version = "0.4"
-chrono.features = ["serde"]
-
-uuid.version = "1.10"
-uuid.features = ["v4", "serde"]
-
 sipper.path = "../../sipper"
 
-tracing-subscriber = "0.3"
-dirs-next = "2.0"
+chrono = "0.4"
+dirs = "6.0"
 futures = "0.3"
 itertools = "0.13"
 log = "0.4"
 open = "5.2"
+reqwest = "0.12"
 scraper = "0.22"
+serde = "1.0"
 serde_json = "1.0"
 thiserror = "1.0"
+tokio = "1.38"
+tracing-subscriber = "0.3"
+tokio-stream = "0.1"
 url = "2.5"
+uuid = "1.10"
 
-[build-dependencies]
-iced_fontello = "0.13"

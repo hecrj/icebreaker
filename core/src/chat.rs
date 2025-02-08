@@ -1,10 +1,10 @@
 mod schema;
 
-use crate::data::assistant::{self, Assistant, Reply, Token};
-use crate::data::chat::schema::Schema;
-use crate::data::model;
-use crate::data::plan::{self, Plan};
-use crate::data::Error;
+use crate::assistant::{self, Assistant, Reply, Token};
+use crate::chat::schema::Schema;
+use crate::model;
+use crate::plan::{self, Plan};
+use crate::Error;
 
 use futures::{SinkExt, Stream, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -354,7 +354,7 @@ impl LastOpened {
 }
 
 async fn storage_dir() -> Result<PathBuf, io::Error> {
-    let directory = dirs_next::data_local_dir()
+    let directory = dirs::data_local_dir()
         .unwrap_or(PathBuf::from("."))
         .join("icebreaker")
         .join("chats");

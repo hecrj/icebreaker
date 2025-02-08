@@ -1,12 +1,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+use icebreaker_core as core;
 
-mod data;
 mod icon;
 mod screen;
 mod widget;
 
-use crate::data::assistant;
-use crate::data::{Chat, Error};
+use crate::core::assistant;
+use crate::core::{Chat, Error};
 use crate::screen::boot;
 use crate::screen::conversation;
 use crate::screen::search;

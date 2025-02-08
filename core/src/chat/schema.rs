@@ -1,8 +1,8 @@
-use crate::data::assistant;
-use crate::data::chat::{Id, Item};
-use crate::data::model;
-use crate::data::plan;
-use crate::data::{self, Url};
+use crate::assistant;
+use crate::chat::{Id, Item};
+use crate::model;
+use crate::plan;
+use crate::Url;
 
 use futures::never::Never;
 use serde::de::{self, Deserializer, Error, MapAccess, Visitor};
@@ -142,7 +142,7 @@ pub struct Plan {
 }
 
 impl Plan {
-    fn from_data(plan: data::Plan) -> Self {
+    fn from_data(plan: crate::Plan) -> Self {
         Self {
             reasoning: plan.reasoning.map(Reasoning::from_data),
             steps: plan.steps.into_iter().map(Step::from_data).collect(),
@@ -155,8 +155,8 @@ impl Plan {
         }
     }
 
-    fn to_data(self) -> data::Plan {
-        data::Plan {
+    fn to_data(self) -> crate::Plan {
+        crate::Plan {
             reasoning: self.reasoning.map(Reasoning::to_data),
             steps: self.steps.into_iter().map(Step::to_data).collect(),
             execution: plan::Execution {

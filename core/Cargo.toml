@@ -1,0 +1,34 @@
+[package]
+name = "icebreaker_core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+iced.workspace = true # TODO: Remove
+
+tokio.workspace = true
+tokio.features = ["fs", "io-util", "process", "time"]
+
+tokio-stream.workspace = true
+tokio-stream.features = ["io-util"]
+
+reqwest.workspace = true
+reqwest.features = ["json", "socks", "rustls-tls"]
+
+serde.workspace = true
+serde.features = ["derive"]
+
+chrono.workspace = true
+chrono.features = ["serde"]
+
+uuid.workspace = true
+uuid.features = ["v4", "serde"]
+
+futures.workspace = true
+serde_json.workspace = true
+scraper.workspace = true
+dirs.workspace = true
+url.workspace = true
+thiserror.workspace = true
+log.workspace = true
+sipper.workspace = true

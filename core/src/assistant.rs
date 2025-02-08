@@ -1,5 +1,5 @@
-use crate::data::model;
-use crate::data::Error;
+use crate::model;
+use crate::Error;
 
 use futures::channel::mpsc;
 use futures::{FutureExt, SinkExt, Stream, StreamExt};

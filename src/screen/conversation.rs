@@ -1,9 +1,9 @@
-use crate::data;
-use crate::data::assistant::{self, Assistant, Backend, BootEvent, Token};
-use crate::data::chat::{self, Chat, Entry, Id, Strategy};
-use crate::data::model::File;
-use crate::data::plan;
-use crate::data::{Error, Url};
+use crate::core;
+use crate::core::assistant::{self, Assistant, Backend, BootEvent, Token};
+use crate::core::chat::{self, Chat, Entry, Id, Strategy};
+use crate::core::model::File;
+use crate::core::plan;
+use crate::core::{Error, Url};
 use crate::icon;
 use crate::widget::tip;
 
@@ -907,7 +907,7 @@ pub struct Plan {
 }
 
 impl Plan {
-    fn from_data(plan: data::Plan) -> Self {
+    fn from_data(plan: core::Plan) -> Self {
         Self {
             reasoning: plan.reasoning.map(Reasoning::from_data),
             steps: plan.steps,
@@ -920,8 +920,8 @@ impl Plan {
         }
     }
 
-    fn to_data(&self) -> data::Plan {
-        data::Plan {
+    fn to_data(&self) -> core::Plan {
+        core::Plan {
             reasoning: self.reasoning.as_ref().map(Reasoning::to_data),
             steps: self.steps.clone(),
             execution: plan::Execution {

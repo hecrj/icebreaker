@@ -1,5 +1,5 @@
-use crate::data::assistant::{Assistant, Message, Reasoning, Reply, Token};
-use crate::data::Error;
+use crate::assistant::{Assistant, Message, Reasoning, Reply, Token};
+use crate::Error;
 
 use futures::StreamExt;
 use serde::Deserialize;
