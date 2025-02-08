@@ -4,8 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-iced.workspace = true # TODO: Remove
-
 tokio.workspace = true
 tokio.features = ["fs", "io-util", "process", "time"]
 

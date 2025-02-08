@@ -1,9 +1,8 @@
 use crate::assistant::{Assistant, Message, Reasoning, Reply, Token};
 use crate::Error;
 
-use futures::StreamExt;
 use serde::Deserialize;
-use sipper::Sender;
+use sipper::{sipper, Sender, Sipper};
 use url::Url;
 
 use std::collections::HashMap;
@@ -369,18 +368,14 @@ async fn execute(
 
                  Message::User(query.to_owned())];
 
-                let mut reply = iced::stream::try_channel(1, |sender| async move {
-                    let mut sender = Sender::new(sender);
-
-                    let _reply = assistant
+                let mut reply = sipper(|mut sender| async move {
+                    assistant
                         .reply("You are a helpful assistant.", history, &query, &mut sender)
-                        .await?;
-
-                    Ok::<_, Error>(())
+                        .await
                 })
-                .boxed();
+                .sip();
 
-                while let Some((reply, token)) = reply.next().await.transpose()? {
+                while let Some((reply, token)) = reply.next().await {
                     process.update(Outcome::Answer(Status::Active(reply))).await;
                     sender.send(Event::Understanding(token)).await;
                 }

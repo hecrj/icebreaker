@@ -6,9 +6,9 @@ use crate::model;
 use crate::plan::{self, Plan};
 use crate::Error;
 
-use futures::{SinkExt, Stream, StreamExt};
+use futures::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
-use sipper::Sender;
+use sipper::{sipper, Sender, Sipper};
 use tokio::fs;
 use tokio::task;
 use uuid::Uuid;
@@ -177,27 +177,24 @@ pub fn complete(
     let assistant = assistant.clone();
     let history = history(items);
 
-    // TODO
-    iced::stream::try_channel(1, move |sender| async move {
-        let mut sender = Sender::new(sender);
+    sipper::stream(sipper(move |sender| async move {
+        let mut sender = sender.map(Ok);
 
         if strategy.search {
             let _ = sender.send(Event::PlanAdded).await;
 
-            Plan::search(&assistant, &history, &mut sender.map(Event::PlanChanged)).await?
+            Plan::search(&assistant, &history, &mut sender.map(Event::PlanChanged)).await?;
         } else {
             reply(&assistant, &history, &mut sender).await?;
         }
 
-        sender.send(Event::ExchangeOver).await;
-
-        Ok(())
-    })
+        Ok(Event::ExchangeOver)
+    }))
 }
 
-async fn reply<'a>(
-    assistant: &'a Assistant,
-    messages: &'a [assistant::Message],
+async fn reply(
+    assistant: &Assistant,
+    messages: &[assistant::Message],
     sender: &mut Sender<Event>,
 ) -> Result<(), Error> {
     let _ = sender.send(Event::ReplyAdded).await;
@@ -224,7 +221,7 @@ pub fn title(assistant: &Assistant, items: &[Item]) -> impl Stream<Item = Result
     let assistant = assistant.clone();
     let history = history(&items);
 
-    iced::stream::try_channel(1, move |mut sender| async move {
+    sipper::stream(sipper(move |mut sender| async move {
         let request = [assistant::Message::User(
             "Give me a short title for our conversation so far, \
                     without considering this interaction. \
@@ -232,36 +229,33 @@ pub fn title(assistant: &Assistant, items: &[Item]) -> impl Stream<Item = Result
                 .to_owned(),
         )];
 
-        let mut title_suggestion = assistant
-            .complete(SYSTEM_PROMPT, &history, &request)
-            .boxed();
-
         let mut title = String::new();
 
-        while let Some(token) = title_suggestion.next().await.transpose()? {
-            if let Token::Talking(token) = token {
-                title.push_str(&token);
-
-                if title.len() > 80 {
-                    title.push_str("...");
-                }
-
-                let _ = sender
-                    .send(Title::Partial(title.trim().trim_matches('"').to_owned()))
-                    .await;
-
-                if title.len() > 80 {
-                    break;
-                }
-            }
+        fn sanitize(title: &str) -> String {
+            title.trim().trim_matches('"').to_owned()
         }
 
-        let _ = sender
-            .send(Title::Complete(title.trim().trim_matches('"').to_owned()))
-            .await;
+        let mut completion = assistant
+            .complete(SYSTEM_PROMPT, &history, &request)
+            .progress()
+            .boxed();
 
-        Ok(())
-    })
+        while let Some(token) = completion.next().await {
+            if let Token::Talking(token) = token {
+                title.push_str(&token);
+            }
+
+            let is_too_long = title.len() > 80;
+
+            if is_too_long {
+                title.push_str("...");
+            }
+
+            sender.send(Ok(Title::Partial(sanitize(&title)))).await;
+        }
+
+        Ok(Title::Complete(sanitize(&title)))
+    }))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

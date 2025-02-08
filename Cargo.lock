@@ -1916,7 +1916,6 @@ dependencies = [
  "chrono",
  "dirs",
  "futures",
- "iced",
  "log",
  "reqwest",
  "scraper",

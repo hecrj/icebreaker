@@ -1,11 +1,11 @@
 use crate::model;
 use crate::Error;
 
-use futures::channel::mpsc;
-use futures::{FutureExt, SinkExt, Stream, StreamExt};
+use futures::Stream;
+use futures::{FutureExt, StreamExt};
 use serde::Deserialize;
 use serde_json::json;
-use sipper::Sender;
+use sipper::{sipper, Sender, Sipper};
 use tokio::fs;
 use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt};
 use tokio::process;
@@ -32,23 +32,22 @@ impl Assistant {
         backend: Backend,
     ) -> impl Stream<Item = Result<BootEvent, Error>> {
         #[derive(Clone)]
-        struct Sender(mpsc::Sender<BootEvent>);
+        struct Sender(sipper::Sender<Result<BootEvent, Error>>);
 
         impl Sender {
             async fn log(&mut self, log: String) {
-                let _ = self.0.send(BootEvent::Logged(log)).await;
+                let _ = self.0.send(Ok(BootEvent::Logged(log))).await;
             }
 
             async fn progress(&mut self, stage: &'static str, percent: u64) {
-                let _ = self.0.send(BootEvent::Progressed { stage, percent }).await;
-            }
-
-            async fn finish(mut self, assistant: Assistant) {
-                let _ = self.0.send(BootEvent::Finished(assistant)).await;
+                let _ = self
+                    .0
+                    .send(Ok(BootEvent::Progressed { stage, percent }))
+                    .await;
             }
         }
 
-        iced::stream::try_channel(1, move |sender| async move {
+        sipper::stream(sipper(move |sender| async move {
             let mut sender = Sender(sender);
 
             fs::create_dir_all(Self::MODELS_DIR).await?;
@@ -361,18 +360,14 @@ impl Assistant {
                 .factor_first()
                 .0
             {
-                sender
-                    .finish(Assistant {
-                        file,
-                        _server: Arc::new(server),
-                    })
-                    .await;
-
-                return Ok(());
+                return Ok(BootEvent::Finished(Assistant {
+                    file,
+                    _server: Arc::new(server),
+                }));
             }
 
             Err(Error::ExecutorFailed("llama-server exited unexpectedly"))
-        })
+        }))
     }
 
     pub async fn reply(
@@ -386,9 +381,10 @@ impl Assistant {
         let mut reasoning_started_at: Option<Instant> = None;
         let mut content = String::new();
         let mut reasoning_content = String::new();
-        let mut next_token = self.complete(prompt, messages, append).boxed();
 
-        while let Some(token) = next_token.next().await.transpose()? {
+        let mut completion = self.complete(prompt, messages, append).sip();
+
+        while let Some(token) = completion.next().await {
             match &token {
                 Token::Reasoning(token) => {
                     reasoning = {
@@ -414,7 +410,7 @@ impl Assistant {
                 }
             }
 
-            let _ = sender
+            sender
                 .send((
                     Reply {
                         reasoning: reasoning.clone(),
@@ -436,8 +432,8 @@ impl Assistant {
         system_prompt: &'a str,
         messages: &'a [Message],
         append: &'a [Message],
-    ) -> impl Stream<Item = Result<Token, Error>> + 'a {
-        iced::stream::try_channel(1, move |mut sender| async move {
+    ) -> impl Sipper<Result<(), Error>, Token> + 'a {
+        sipper(move |mut sender| async move {
             let client = reqwest::Client::new();
 
             let request = {
