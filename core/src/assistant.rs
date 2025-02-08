@@ -5,7 +5,7 @@ use futures::Stream;
 use futures::{FutureExt, StreamExt};
 use serde::Deserialize;
 use serde_json::json;
-use sipper::{sipper, Sender, Sipper};
+use sipper::{sipper, Sipper, Straw};
 use tokio::fs;
 use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt};
 use tokio::process;
@@ -370,60 +370,61 @@ impl Assistant {
         }))
     }
 
-    pub async fn reply(
-        &self,
-        prompt: &str,
-        messages: &[Message],
-        append: &[Message],
-        sender: &mut Sender<(Reply, Token)>,
-    ) -> Result<Reply, Error> {
-        let mut reasoning = None;
-        let mut reasoning_started_at: Option<Instant> = None;
-        let mut content = String::new();
-        let mut reasoning_content = String::new();
+    pub fn reply<'a>(
+        &'a self,
+        prompt: &'a str,
+        messages: &'a [Message],
+        append: &'a [Message],
+    ) -> impl Straw<Reply, (Reply, Token), Error> + 'a {
+        sipper(move |mut progress| async move {
+            let mut reasoning = None;
+            let mut reasoning_started_at: Option<Instant> = None;
+            let mut content = String::new();
+            let mut reasoning_content = String::new();
 
-        let mut completion = self.complete(prompt, messages, append).sip();
+            let mut completion = self.complete(prompt, messages, append).sip();
 
-        while let Some(token) = completion.next().await {
-            match &token {
-                Token::Reasoning(token) => {
-                    reasoning = {
-                        let mut reasoning = reasoning.take().unwrap_or_else(|| Reasoning {
-                            content: String::new(),
-                            duration: Duration::ZERO,
-                        });
+            while let Some(token) = completion.next().await {
+                match &token {
+                    Token::Reasoning(token) => {
+                        reasoning = {
+                            let mut reasoning = reasoning.take().unwrap_or_else(|| Reasoning {
+                                content: String::new(),
+                                duration: Duration::ZERO,
+                            });
 
-                        if let Some(reasoning_started_at) = reasoning_started_at {
-                            reasoning.duration = reasoning_started_at.elapsed();
-                        } else {
-                            reasoning_started_at = Some(Instant::now());
-                        }
+                            if let Some(reasoning_started_at) = reasoning_started_at {
+                                reasoning.duration = reasoning_started_at.elapsed();
+                            } else {
+                                reasoning_started_at = Some(Instant::now());
+                            }
 
-                        reasoning_content.push_str(token);
-                        reasoning.content = reasoning_content.trim().to_owned();
+                            reasoning_content.push_str(token);
+                            reasoning.content = reasoning_content.trim().to_owned();
 
-                        Some(reasoning)
-                    };
+                            Some(reasoning)
+                        };
+                    }
+                    Token::Talking(token) => {
+                        content.push_str(token);
+                    }
                 }
-                Token::Talking(token) => {
-                    content.push_str(token);
-                }
+
+                progress
+                    .send((
+                        Reply {
+                            reasoning: reasoning.clone(),
+                            content: content.trim().to_owned(),
+                        },
+                        token,
+                    ))
+                    .await;
             }
 
-            sender
-                .send((
-                    Reply {
-                        reasoning: reasoning.clone(),
-                        content: content.trim().to_owned(),
-                    },
-                    token,
-                ))
-                .await;
-        }
-
-        Ok(Reply {
-            reasoning: reasoning.clone(),
-            content: content.trim().to_owned(),
+            Ok(Reply {
+                reasoning: reasoning.clone(),
+                content: content.trim().to_owned(),
+            })
         })
     }
 
@@ -432,7 +433,7 @@ impl Assistant {
         system_prompt: &'a str,
         messages: &'a [Message],
         append: &'a [Message],
-    ) -> impl Sipper<Result<(), Error>, Token> + 'a {
+    ) -> impl Straw<(), Token, Error> + 'a {
         sipper(move |mut sender| async move {
             let client = reqwest::Client::new();
 

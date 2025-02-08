@@ -2,7 +2,7 @@ use crate::assistant::{Assistant, Message, Reasoning, Reply, Token};
 use crate::Error;
 
 use serde::Deserialize;
-use sipper::{sipper, Sender, Sipper};
+use sipper::{sipper, Sender, Sipper, Straw};
 use url::Url;
 
 use std::collections::HashMap;
@@ -76,73 +76,78 @@ pub enum Event {
 }
 
 impl Plan {
-    pub(crate) async fn search(
-        assistant: &Assistant,
-        history: &[Message],
-        sender: &mut Sender<Event>,
-    ) -> Result<(), Error> {
-        let Some(query) = history.iter().rev().find_map(|item| {
-            if let Message::User(query) = item {
-                Some(query)
-            } else {
-                None
-            }
-        }) else {
-            return Ok(());
-        };
+    pub(crate) fn search<'a>(
+        assistant: &'a Assistant,
+        history: &'a [Message],
+    ) -> impl Straw<(), Event, Error> + 'a {
+        sipper(move |mut progress| async move {
+            let Some(query) = history.iter().rev().find_map(|item| {
+                if let Message::User(query) = item {
+                    Some(query)
+                } else {
+                    None
+                }
+            }) else {
+                return Ok(());
+            };
 
-        let plan = design(assistant, &history, sender).await?;
-        let _ = sender.send(Event::Designed(plan.clone())).await;
+            let plan = design(assistant, &history).run(&progress).await?;
+            let _ = progress.send(Event::Designed(plan.clone())).await;
 
-        execute(assistant, &history, query, &plan, sender).await?;
+            execute(assistant, &history, query, &plan)
+                .run(progress)
+                .await?;
 
-        Ok(())
+            Ok(())
+        })
     }
 }
 
-async fn design<'a>(
-    assistant: &Assistant,
-    history: &[Message],
-    sender: &mut Sender<Event>,
-) -> Result<Plan, Error> {
-    let reply = assistant
-        .reply(
-            BROWSE_PROMPT,
-            history,
-            &[],
-            &mut sender.filter_map(|(reply, _token): (Reply, Token)| {
-                reply.reasoning.map(Event::Designing)
-            }),
-        )
-        .await?;
+fn design<'a>(
+    assistant: &'a Assistant,
+    history: &'a [Message],
+) -> impl Straw<Plan, Event, Error> + 'a {
+    sipper(move |progress| async move {
+        let reply = assistant
+            .reply(BROWSE_PROMPT, history, &[])
+            .filter_map(|(reply, _token)| reply.reasoning.map(Event::Designing))
+            .run(progress)
+            .await?;
 
-    let steps = reply
-        .content
-        .split("```")
-        .skip(1)
-        .next()
-        .unwrap_or(&reply.content);
+        let steps = reply
+            .content
+            .split("```")
+            .skip(1)
+            .next()
+            .unwrap_or(&reply.content);
 
-    let plan = steps.trim_start_matches("json").trim();
+        let plan = steps.trim_start_matches("json").trim();
 
-    Ok(Plan {
-        steps: serde_json::from_str(plan)?,
-        reasoning: reply.reasoning,
-        execution: Execution::default(),
+        Ok(Plan {
+            steps: serde_json::from_str(plan)?,
+            reasoning: reply.reasoning,
+            execution: Execution::default(),
+        })
     })
 }
 
-async fn execute(
-    assistant: &Assistant,
-    history: &[Message],
-    query: &str,
-    plan: &Plan,
-    sender: &mut Sender<Event>,
-) -> Result<Execution, Error> {
+fn execute<'a>(
+    assistant: &'a Assistant,
+    history: &'a [Message],
+    query: &'a str,
+    plan: &'a Plan,
+) -> impl Straw<Execution, Event, Error> + 'a {
     struct Process {
         outcomes: Vec<Outcome>,
         outputs: HashMap<String, Output>,
         sender: Sender<Event>,
+    }
+
+    #[derive(Debug)]
+    enum Output {
+        Links(Vec<reqwest::Url>),
+        Text(Vec<String>),
+        Answer,
     }
 
     impl Process {
@@ -238,127 +243,121 @@ async fn execute(
         }
     }
 
-    let mut process = Process {
-        outcomes: Vec::new(),
-        outputs: HashMap::new(),
-        sender: sender.clone(),
-    };
+    sipper(move |mut sender| async move {
+        let mut process = Process {
+            outcomes: Vec::new(),
+            outputs: HashMap::new(),
+            sender: sender.clone(),
+        };
 
-    #[derive(Debug)]
-    enum Output {
-        Links(Vec<reqwest::Url>),
-        Text(Vec<String>),
-        Answer,
-    }
+        let client = client();
 
-    let client = client();
+        for (i, step) in plan.steps.iter().enumerate() {
+            println!("Running: {}", step.description);
 
-    for (i, step) in plan.steps.iter().enumerate() {
-        println!("Running: {}", step.description);
+            match step.function.as_str() {
+                "search" => {
+                    let query = step.inputs.first().map(String::as_str).unwrap_or_default();
 
-        match step.function.as_str() {
-            "search" => {
-                let query = step.inputs.first().map(String::as_str).unwrap_or_default();
+                    log::info!("Searching on DuckDuckGo: {query}");
+                    process.start(Outcome::Search).await;
 
-                log::info!("Searching on DuckDuckGo: {query}");
-                process.start(Outcome::Search).await;
-
-                let search_results = client
-                    .get("https://html.duckduckgo.com/html/")
-                    .version(reqwest::Version::HTTP_2)
-                    .query(&[("q", query)])
-                    .send()
-                    .await?
-                    .error_for_status()?
-                    .text()
-                    .await?;
-
-                let links = {
-                    let html = scraper::Html::parse_document(&search_results);
-                    let selector = scraper::Selector::parse(".result__a").unwrap();
-
-                    html.select(&selector)
-                        .filter_map(|link| {
-                            let encoded = link.attr("href")?;
-
-                            if encoded.contains("ad_domain") {
-                                return None;
-                            }
-
-                            reqwest::Url::parse(
-                                &url::form_urlencoded::parse(encoded.as_bytes()).next()?.1,
-                            )
-                            .ok()
-                        })
-                        .take(1)
-                        .collect()
-                };
-
-                log::info!("-- Found: {links:?}");
-
-                process.update(Outcome::Search(Status::Active(links))).await;
-                process.done(&step.evidence).await;
-            }
-            "scrape_text" => {
-                let mut output = Vec::new();
-
-                let links = process.links(&step.inputs);
-                let candidates = scraper::Selector::parse("p, a").unwrap();
-
-                process.start(Outcome::ScrapeText).await;
-
-                for link in links {
-                    log::info!("Scraping text: {link}");
-
-                    let html = client
-                        .get(link)
+                    let search_results = client
+                        .get("https://html.duckduckgo.com/html/")
                         .version(reqwest::Version::HTTP_2)
+                        .query(&[("q", query)])
                         .send()
                         .await?
                         .error_for_status()?
                         .text()
                         .await?;
 
-                    log::info!("-- HTML retrieved ({} chars)", html.len());
-                    log::trace!("{}", html);
+                    let links = {
+                        let html = scraper::Html::parse_document(&search_results);
+                        let selector = scraper::Selector::parse(".result__a").unwrap();
 
-                    let text = {
-                        let html = scraper::Html::parse_document(&html);
+                        html.select(&selector)
+                            .filter_map(|link| {
+                                let encoded = link.attr("href")?;
 
-                        let text = html
-                            .select(&candidates)
-                            .flat_map(|candidate| candidate.text())
-                            .map(str::trim)
-                            .filter(|text| !text.is_empty())
-                            .collect::<Vec<_>>();
+                                if encoded.contains("ad_domain") {
+                                    return None;
+                                }
 
-                        log::info!("-- Scraped {} lines of text", text.len());
-
-                        text.join("\n")
+                                reqwest::Url::parse(
+                                    &url::form_urlencoded::parse(encoded.as_bytes()).next()?.1,
+                                )
+                                .ok()
+                            })
+                            .take(1)
+                            .collect()
                     };
 
-                    output.push(text);
-                    process
-                        .update(Outcome::ScrapeText(Status::Active(output.clone())))
-                        .await;
+                    log::info!("-- Found: {links:?}");
+
+                    process.update(Outcome::Search(Status::Active(links))).await;
+                    process.done(&step.evidence).await;
                 }
+                "scrape_text" => {
+                    let mut output = Vec::new();
 
-                process.done(&step.evidence).await;
-            }
-            "answer" => {
-                process.start(Outcome::Answer).await;
+                    let links = process.links(&step.inputs);
+                    let candidates = scraper::Selector::parse("p, a").unwrap();
 
-                let steps = plan
-                    .steps
-                    .iter()
-                    .take(i)
-                    .map(|step| format!("- {}", step.description))
-                    .collect::<Vec<_>>()
-                    .join("\n");
+                    process.start(Outcome::ScrapeText).await;
 
-                let outputs = process.text(&step.inputs).join("\n\n");
+                    for link in links {
+                        log::info!("Scraping text: {link}");
 
-                let query = [Message::System(format!(
+                        let html = client
+                            .get(link)
+                            .version(reqwest::Version::HTTP_2)
+                            .send()
+                            .await?
+                            .error_for_status()?
+                            .text()
+                            .await?;
+
+                        log::info!("-- HTML retrieved ({} chars)", html.len());
+                        log::trace!("{}", html);
+
+                        let text = {
+                            let html = scraper::Html::parse_document(&html);
+
+                            let text = html
+                                .select(&candidates)
+                                .flat_map(|candidate| candidate.text())
+                                .map(str::trim)
+                                .filter(|text| !text.is_empty())
+                                .collect::<Vec<_>>();
+
+                            log::info!("-- Scraped {} lines of text", text.len());
+
+                            text.join("\n")
+                        };
+
+                        output.push(text);
+                        process
+                            .update(Outcome::ScrapeText(Status::Active(output.clone())))
+                            .await;
+                    }
+
+                    process.done(&step.evidence).await;
+                }
+                "answer" => {
+                    process.start(Outcome::Answer).await;
+
+                    let steps = plan
+                        .steps
+                        .iter()
+                        .take(i)
+                        .map(|step| format!("- {}", step.description))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+
+                    let outputs = process.text(&step.inputs).join("\n\n");
+
+                    let query = [Message::System(format!(
                         "In order to figure out the user's request, you have already performed certain actions to \
                         gather information. Here is a summary of the steps executed so far:\n\
                         \n\
@@ -368,26 +367,24 @@ async fn execute(
 
                  Message::User(query.to_owned())];
 
-                let mut reply = sipper(|mut sender| async move {
-                    assistant
-                        .reply("You are a helpful assistant.", history, &query, &mut sender)
-                        .await
-                })
-                .sip();
+                    let mut reply = assistant
+                        .reply("You are a helpful assistant.", history, &query)
+                        .sip();
 
-                while let Some((reply, token)) = reply.next().await {
-                    process.update(Outcome::Answer(Status::Active(reply))).await;
-                    sender.send(Event::Understanding(token)).await;
+                    while let Some((reply, token)) = reply.next().await {
+                        process.update(Outcome::Answer(Status::Active(reply))).await;
+                        sender.send(Event::Understanding(token)).await;
+                    }
+
+                    process.done(&step.evidence).await;
                 }
-
-                process.done(&step.evidence).await;
+                _ => {}
             }
-            _ => {}
         }
-    }
 
-    Ok(Execution {
-        outcomes: process.outcomes,
+        Ok(Execution {
+            outcomes: process.outcomes,
+        })
     })
 }
 

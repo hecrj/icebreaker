@@ -6,9 +6,9 @@ use crate::model;
 use crate::plan::{self, Plan};
 use crate::Error;
 
-use futures::{Stream, StreamExt};
+use futures::Stream;
 use serde::{Deserialize, Serialize};
-use sipper::{sipper, Sender, Sipper};
+use sipper::{sipper, Sipper, Straw};
 use tokio::fs;
 use tokio::task;
 use uuid::Uuid;
@@ -196,38 +196,40 @@ pub fn complete(
     let assistant = assistant.clone();
     let history = history(items);
 
-    sipper::stream(sipper(move |sender| async move {
-        let mut sender = sender.map(Ok);
+    sipper::stream(
+        sipper(move |mut sender| async move {
+            if strategy.search {
+                let _ = sender.send(Event::PlanAdded).await;
 
-        if strategy.search {
-            let _ = sender.send(Event::PlanAdded).await;
+                Plan::search(&assistant, &history)
+                    .map(Event::PlanChanged)
+                    .run(&sender)
+                    .await?;
+            } else {
+                reply(&assistant, &history).run(sender).await?;
+            }
 
-            Plan::search(&assistant, &history, &mut sender.map(Event::PlanChanged)).await?;
-        } else {
-            reply(&assistant, &history, &mut sender).await?;
-        }
-
-        Ok(Event::ExchangeOver)
-    }))
+            Ok(Event::ExchangeOver)
+        })
+        .map(Ok),
+    )
 }
 
-async fn reply(
-    assistant: &Assistant,
-    messages: &[assistant::Message],
-    sender: &mut Sender<Event>,
-) -> Result<(), Error> {
-    let _ = sender.send(Event::ReplyAdded).await;
+fn reply<'a>(
+    assistant: &'a Assistant,
+    messages: &'a [assistant::Message],
+) -> impl Straw<(), Event, Error> + 'a {
+    sipper(move |mut sender| async move {
+        let _ = sender.send(Event::ReplyAdded).await;
 
-    let _reply = assistant
-        .reply(
-            SYSTEM_PROMPT,
-            messages,
-            &[],
-            &mut sender.map(|(reply, new_token)| Event::ReplyChanged { reply, new_token }),
-        )
-        .await;
+        let _reply = assistant
+            .reply(SYSTEM_PROMPT, messages, &[])
+            .map(|(reply, new_token)| Event::ReplyChanged { reply, new_token })
+            .run(sender)
+            .await;
 
-    Ok(())
+        Ok(())
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -254,10 +256,7 @@ pub fn title(assistant: &Assistant, items: &[Item]) -> impl Stream<Item = Result
             title.trim().trim_matches('"').to_owned()
         }
 
-        let mut completion = assistant
-            .complete(SYSTEM_PROMPT, &history, &request)
-            .progress()
-            .boxed();
+        let mut completion = assistant.complete(SYSTEM_PROMPT, &history, &request).sip();
 
         while let Some(token) = completion.next().await {
             if let Token::Talking(token) = token {

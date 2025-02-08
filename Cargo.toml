@@ -26,9 +26,11 @@ members = ["core"]
 [workspace.dependencies]
 icebreaker_core.path = "./core"
 
-iced.git = "https://github.com/hecrj/iced.git"
+iced.git = "https://github.com/iced-rs/iced.git"
 iced.rev = "4bbb5cbc1f8b2a0ee8e09be18071368df3ba5bbd"
-# iced.path = "../../iced"
+
+sipper.git = "https://github.com/hecrj/sipper.git"
+sipper.rev = "ca161524a82e2a181bccc384c07d2fc446655f6b"
 
 chrono = "0.4"
 dirs = "6.0"
@@ -40,7 +42,6 @@ reqwest = "0.12"
 scraper = "0.22"
 serde = "1.0"
 serde_json = "1.0"
-sipper = "0.0.2"
 thiserror = "1.0"
 tokio = "1.38"
 tokio-stream = "0.1"
