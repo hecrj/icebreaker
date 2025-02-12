@@ -110,7 +110,7 @@ fn design<'a>(
     sipper(move |progress| async move {
         let reply = assistant
             .reply(BROWSE_PROMPT, history, &[])
-            .filter_map(|(reply, _token)| reply.reasoning.map(Event::Designing))
+            .filter_with(|(reply, _token)| reply.reasoning.map(Event::Designing))
             .run(progress)
             .await?;
 
@@ -364,14 +364,13 @@ fn execute<'a>(
                         {steps}\n\n\
                         The relevant outputs of the actions considered relevant to the user request are provided next:\n\
                         {outputs}")),
-
                  Message::User(query.to_owned())];
 
                     let mut reply = assistant
                         .reply("You are a helpful assistant.", history, &query)
-                        .sip();
+                        .pin();
 
-                    while let Some((reply, token)) = reply.next().await {
+                    while let Some((reply, token)) = reply.sip().await {
                         process.update(Outcome::Answer(Status::Active(reply))).await;
                         sender.send(Event::Understanding(token)).await;
                     }

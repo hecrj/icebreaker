@@ -4,7 +4,7 @@ use crate::Error;
 
 use serde::Deserialize;
 use serde_json::json;
-use sipper::{sipper, FutureExt, Sipper, Straw, Stream, StreamExt};
+use sipper::{sipper, FutureExt, Sipper, Straw, StreamExt};
 use tokio::process;
 
 use std::sync::Arc;
@@ -24,10 +24,7 @@ impl Assistant {
     const MODELS_DIR: &'static str = "./models";
     const HOST_PORT: u64 = 8080;
 
-    pub fn boot(
-        file: model::File,
-        backend: Backend,
-    ) -> impl Stream<Item = Result<BootEvent, Error>> {
+    pub fn boot(file: model::File, backend: Backend) -> impl Straw<Self, BootEvent, Error> {
         use tokio::fs;
         use tokio::io::{self, AsyncBufReadExt};
         use tokio::process;
@@ -35,22 +32,19 @@ impl Assistant {
         use tokio::time;
 
         #[derive(Clone)]
-        struct Sender(sipper::Sender<Result<BootEvent, Error>>);
+        struct Sender(sipper::Sender<BootEvent>);
 
         impl Sender {
             async fn log(&mut self, log: String) {
-                let _ = self.0.send(Ok(BootEvent::Logged(log))).await;
+                let _ = self.0.send(BootEvent::Logged(log)).await;
             }
 
             async fn progress(&mut self, stage: &'static str, percent: u32) {
-                let _ = self
-                    .0
-                    .send(Ok(BootEvent::Progressed { stage, percent }))
-                    .await;
+                let _ = self.0.send(BootEvent::Progressed { stage, percent }).await;
             }
         }
 
-        sipper::stream(sipper(move |sender| async move {
+        sipper(move |sender| async move {
             let mut sender = Sender(sender);
 
             fs::create_dir_all(Self::MODELS_DIR).await?;
@@ -125,10 +119,10 @@ impl Assistant {
                     filename = file.name
                 );
 
-                let mut download = request::download_file(url, &model_path).sip();
+                let mut download = request::download_file(url, &model_path).pin();
                 let mut last_percent = None;
 
-                while let Some(progress) = download.next().await {
+                while let Some(progress) = download.sip().await {
                     if let Some((total, percent)) = progress.percent() {
                         sender.progress("Downloading model...", percent).await;
 
@@ -148,7 +142,7 @@ impl Assistant {
                     }
                 }
 
-                download.finish().await?;
+                download.await?;
             }
 
             sender.progress("Detecting executor...", 0).await;
@@ -347,14 +341,14 @@ impl Assistant {
             if check_health.await {
                 log_handle.abort();
 
-                return Ok(BootEvent::Finished(Assistant {
+                return Ok(Self {
                     file,
                     _server: Arc::new(server),
-                }));
+                });
             }
 
             Err(Error::ExecutorFailed("llama-server exited unexpectedly"))
-        }))
+        })
     }
 
     pub fn reply<'a>(
@@ -369,9 +363,9 @@ impl Assistant {
             let mut content = String::new();
             let mut reasoning_content = String::new();
 
-            let mut completion = self.complete(prompt, messages, append).sip();
+            let mut completion = self.complete(prompt, messages, append).pin();
 
-            while let Some(token) = completion.next().await {
+            while let Some(token) = completion.sip().await {
                 match &token {
                     Token::Reasoning(token) => {
                         reasoning = {
@@ -655,5 +649,4 @@ impl Drop for Server {
 pub enum BootEvent {
     Progressed { stage: &'static str, percent: u32 },
     Logged(String),
-    Finished(Assistant),
 }

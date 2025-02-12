@@ -7,7 +7,7 @@ use crate::plan::{self, Plan};
 use crate::Error;
 
 use serde::{Deserialize, Serialize};
-use sipper::{sipper, Sipper, Straw, Stream};
+use sipper::{sipper, Sipper, Straw};
 use tokio::fs;
 use tokio::task;
 use uuid::Uuid;
@@ -177,7 +177,6 @@ pub enum Event {
     ReplyChanged { reply: Reply, new_token: Token },
     PlanAdded,
     PlanChanged(plan::Event),
-    ExchangeOver,
 }
 
 const SYSTEM_PROMPT: &str = "You are a helpful assistant.";
@@ -191,27 +190,24 @@ pub fn complete(
     assistant: &Assistant,
     items: &[Item],
     strategy: Strategy,
-) -> impl Stream<Item = Result<Event, Error>> {
+) -> impl Straw<(), Event, Error> {
     let assistant = assistant.clone();
     let history = history(items);
 
-    sipper::stream(
-        sipper(move |mut sender| async move {
-            if strategy.search {
-                let _ = sender.send(Event::PlanAdded).await;
+    sipper(move |mut sender| async move {
+        if strategy.search {
+            let _ = sender.send(Event::PlanAdded).await;
 
-                Plan::search(&assistant, &history)
-                    .map(Event::PlanChanged)
-                    .run(&sender)
-                    .await?;
-            } else {
-                reply(&assistant, &history).run(sender).await?;
-            }
+            Plan::search(&assistant, &history)
+                .with(Event::PlanChanged)
+                .run(&sender)
+                .await?;
+        } else {
+            reply(&assistant, &history).run(sender).await?;
+        }
 
-            Ok(Event::ExchangeOver)
-        })
-        .map(Ok),
-    )
+        Ok(())
+    })
 }
 
 fn reply<'a>(
@@ -223,7 +219,7 @@ fn reply<'a>(
 
         let _reply = assistant
             .reply(SYSTEM_PROMPT, messages, &[])
-            .map(|(reply, new_token)| Event::ReplyChanged { reply, new_token })
+            .with(|(reply, new_token)| Event::ReplyChanged { reply, new_token })
             .run(sender)
             .await;
 
@@ -231,17 +227,11 @@ fn reply<'a>(
     })
 }
 
-#[derive(Debug, Clone)]
-pub enum Title {
-    Partial(String),
-    Complete(String),
-}
-
-pub fn title(assistant: &Assistant, items: &[Item]) -> impl Stream<Item = Result<Title, Error>> {
+pub fn title(assistant: &Assistant, items: &[Item]) -> impl Straw<String, String, Error> {
     let assistant = assistant.clone();
     let history = history(&items);
 
-    sipper::stream(sipper(move |mut sender| async move {
+    sipper(move |mut sender| async move {
         let request = [assistant::Message::User(
             "Give me a short title for our conversation so far, \
                     without considering this interaction. \
@@ -255,9 +245,9 @@ pub fn title(assistant: &Assistant, items: &[Item]) -> impl Stream<Item = Result
             title.trim().trim_matches('"').to_owned()
         }
 
-        let mut completion = assistant.complete(SYSTEM_PROMPT, &history, &request).sip();
+        let mut completion = assistant.complete(SYSTEM_PROMPT, &history, &request).pin();
 
-        while let Some(token) = completion.next().await {
+        while let Some(token) = completion.sip().await {
             if let Token::Talking(token) = token {
                 title.push_str(&token);
             }
@@ -268,11 +258,11 @@ pub fn title(assistant: &Assistant, items: &[Item]) -> impl Stream<Item = Result
                 title.push_str("...");
             }
 
-            sender.send(Ok(Title::Partial(sanitize(&title)))).await;
+            sender.send(sanitize(&title)).await;
         }
 
-        Ok(Title::Complete(sanitize(&title)))
-    }))
+        Ok(sanitize(&title))
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

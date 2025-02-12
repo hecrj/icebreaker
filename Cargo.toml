@@ -27,10 +27,7 @@ members = ["core"]
 icebreaker_core.path = "./core"
 
 iced.git = "https://github.com/iced-rs/iced.git"
-iced.rev = "4bbb5cbc1f8b2a0ee8e09be18071368df3ba5bbd"
-
-sipper.git = "https://github.com/hecrj/sipper.git"
-sipper.rev = "c53184fc5517fa027f193ce1ba4c5b40a3b2e18a"
+iced.rev = "97f1db3783dca5a4f60a9f89668613de4dfe9edd"
 
 chrono = "0.4"
 dirs = "6.0"
@@ -42,6 +39,7 @@ reqwest = "0.12"
 scraper = "0.22"
 serde = "1.0"
 serde_json = "1.0"
+sipper = "0.1.0"
 thiserror = "1.0"
 tokio = "1.38"
 tokio-stream = "0.1"

@@ -52,14 +52,17 @@ enum State {
 #[derive(Debug, Clone)]
 pub enum Message {
     ChatsListed(Result<Vec<Entry>, Error>),
-    Booting(Result<BootEvent, Error>),
+    Booting(BootEvent),
+    Booted(Result<Assistant, Error>),
     Tick(Instant),
     InputChanged(text_editor::Action),
     InputResized(Size),
     ToggleSearch,
     Submit,
-    Chatting(Result<chat::Event, Error>),
-    TitleChanged(Result<chat::Title, Error>),
+    Chatting(chat::Event),
+    Chatted(Result<(), Error>),
+    TitleChanging(String),
+    TitleChanged(Result<String, Error>),
     Copy(String),
     Regenerate(usize),
     ToggleReasoning(usize),
@@ -83,8 +86,12 @@ pub enum Action {
 
 impl Conversation {
     pub fn new(file: File, backend: Backend) -> (Self, Task<Message>) {
-        let (boot, handle) =
-            Task::run(Assistant::boot(file.clone(), backend), Message::Booting).abortable();
+        let (boot, handle) = Task::sip(
+            Assistant::boot(file.clone(), backend),
+            Message::Booting,
+            Message::Booted,
+        )
+        .abortable();
 
         (
             Self {
@@ -149,7 +156,7 @@ impl Conversation {
 
                 Action::None
             }
-            Message::Booting(Ok(event)) => match event {
+            Message::Booting(event) => match event {
                 BootEvent::Progressed {
                     stage: new_stage,
                     percent,
@@ -171,17 +178,12 @@ impl Conversation {
 
                     Action::None
                 }
-                BootEvent::Finished(assistant) => {
-                    self.state = State::Running {
-                        assistant,
-                        sending: None,
-                    };
-
-                    Action::None
-                }
             },
-            Message::Booting(Err(error)) => {
-                self.error = Some(error);
+            Message::Booted(Ok(assistant)) => {
+                self.state = State::Running {
+                    assistant,
+                    sending: None,
+                };
 
                 Action::None
             }
@@ -225,9 +227,10 @@ impl Conversation {
                     content: Content::parse(content.to_owned()),
                 });
 
-                let (send, handle) = Task::run(
+                let (send, handle) = Task::sip(
                     chat::complete(assistant, &self.history.to_data(), self.strategy),
                     Message::Chatting,
+                    Message::Chatted,
                 )
                 .abortable();
 
@@ -235,15 +238,15 @@ impl Conversation {
 
                 Action::Run(Task::batch([send, snap_chat_to_end()]))
             }
-            Message::TitleChanged(Ok(chat::Title::Partial(title))) => {
+            Message::TitleChanging(title) => {
                 self.title = Some(title);
                 Action::None
             }
-            Message::TitleChanged(Ok(chat::Title::Complete(title))) => {
+            Message::TitleChanged(Ok(title)) => {
                 self.title = Some(title);
                 self.save()
             }
-            Message::Chatting(Ok(event)) if !self.can_send() => match event {
+            Message::Chatting(event) if !self.can_send() => match event {
                 chat::Event::ReplyAdded => {
                     self.history.push(Item::Reply(Reply::default()));
 
@@ -272,30 +275,31 @@ impl Conversation {
 
                     Action::None
                 }
-                chat::Event::ExchangeOver => {
-                    if let State::Running {
-                        sending, assistant, ..
-                    } = &mut self.state
-                    {
-                        *sending = None;
-
-                        let messages: Vec<_> = self.history.to_data();
-
-                        if self.title.is_none() || messages.len() == 5 {
-                            Action::Run(Task::run(
-                                chat::title(&assistant, &messages),
-                                Message::TitleChanged,
-                            ))
-                        } else {
-                            self.save()
-                        }
-                    } else {
-                        Action::None
-                    }
-                }
             },
-            Message::Chatting(Ok(_outdated_event)) => Action::None,
-            Message::Chatting(Err(error)) => {
+            Message::Chatting(_outdated_event) => Action::None,
+            Message::Chatted(Ok(())) => {
+                if let State::Running {
+                    sending, assistant, ..
+                } = &mut self.state
+                {
+                    *sending = None;
+
+                    let messages: Vec<_> = self.history.to_data();
+
+                    if self.title.is_none() || messages.len() == 5 {
+                        Action::Run(Task::sip(
+                            chat::title(&assistant, &messages),
+                            Message::TitleChanging,
+                            Message::TitleChanged,
+                        ))
+                    } else {
+                        self.save()
+                    }
+                } else {
+                    Action::None
+                }
+            }
+            Message::Chatted(Err(error)) => {
                 self.error = Some(dbg!(error));
 
                 if let State::Running { sending, .. } = &mut self.state {
@@ -408,7 +412,8 @@ impl Conversation {
 
                 Action::None
             }
-            Message::Created(Err(error))
+            Message::Booted(Err(error))
+            | Message::Created(Err(error))
             | Message::Saved(Err(error))
             | Message::TitleChanged(Err(error))
             | Message::ChatFetched(Err(error)) => {
