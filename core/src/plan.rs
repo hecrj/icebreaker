@@ -1,4 +1,4 @@
-use crate::assistant::{Assistant, Message, Reasoning, Reply, Token};
+use crate::assistant::{Assistant, Message, Reasoning, Reply};
 use crate::Error;
 
 use serde::Deserialize;
@@ -20,11 +20,6 @@ pub struct Step {
     pub description: String,
     pub function: String,
     pub inputs: Vec<String>,
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct Execution {
-    pub outcomes: Vec<Outcome>,
 }
 
 #[derive(Debug, Clone)]
@@ -72,7 +67,6 @@ pub enum Event {
     Designed(Plan),
     OutcomeAdded(Outcome),
     OutcomeChanged(Outcome),
-    Understanding(Token),
 }
 
 impl Plan {
@@ -256,7 +250,7 @@ fn execute<'a>(
         }
     }
 
-    sipper(move |mut sender| async move {
+    sipper(move |sender| async move {
         let mut process = Process {
             outcomes: Vec::new(),
             outputs: HashMap::new(),
@@ -383,9 +377,8 @@ fn execute<'a>(
                         .reply("You are a helpful assistant.", history, &query)
                         .pin();
 
-                    while let Some((reply, token)) = reply.sip().await {
+                    while let Some((reply, _token)) = reply.sip().await {
                         process.update(Outcome::Answer(Status::Active(reply))).await;
-                        sender.send(Event::Understanding(token)).await;
                     }
 
                     process.done(&step.evidence).await;

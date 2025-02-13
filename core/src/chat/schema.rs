@@ -33,18 +33,7 @@ impl Message {
     pub fn from_data(item: Item) -> Self {
         match item {
             Item::User(content) => Message::User(content),
-            Item::Reply(reply) => Message::Reply(Reply {
-                reasoning: reply
-                    .reasoning
-                    .as_ref()
-                    .map(|reasoning| reasoning.content.clone())
-                    .unwrap_or_default(),
-                reasoning_time: reply
-                    .reasoning
-                    .map(|reasoning| reasoning.duration)
-                    .unwrap_or_default(),
-                content: reply.content,
-            }),
+            Item::Reply(reply) => Message::Reply(Reply::from_data(reply)),
             Item::Plan(plan) => Message::Plan(Plan::from_data(plan)),
         }
     }
@@ -93,6 +82,7 @@ impl Reply {
                 })
             },
             content: self.content,
+            last_token: None,
         }
     }
 }

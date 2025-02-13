@@ -1,11 +1,13 @@
 use crate::core;
-use crate::core::assistant::{self, Assistant, Backend, BootEvent, Token};
+use crate::core::assistant::{Assistant, Backend, BootEvent};
 use crate::core::chat::{self, Chat, Entry, Id, Strategy};
 use crate::core::model::File;
 use crate::core::plan;
 use crate::core::{Error, Url};
 use crate::icon;
-use crate::widget::tip;
+use crate::ui::markdown;
+use crate::ui::{Markdown, Reasoning, Reply};
+use crate::widget::{copy, regenerate, tip};
 
 use iced::border;
 use iced::clipboard;
@@ -15,10 +17,10 @@ use iced::theme::palette;
 use iced::time::{self, Duration, Instant};
 use iced::widget::{
     self, bottom, bottom_center, button, center, center_x, center_y, column, container,
-    horizontal_space, hover, markdown, pop, progress_bar, right, right_center, row, scrollable,
-    stack, text, text_editor, tooltip, value, vertical_rule, vertical_space, Text,
+    horizontal_space, hover, pop, progress_bar, right, right_center, row, scrollable, stack, text,
+    text_editor, tooltip, value, vertical_space,
 };
-use iced::{Center, Element, Fill, Font, Shrink, Size, Subscription, Theme};
+use iced::{Center, Element, Fill, Font, Function, Shrink, Size, Subscription, Theme};
 
 pub struct Conversation {
     backend: Backend,
@@ -65,7 +67,7 @@ pub enum Message {
     TitleChanged(Result<String, Error>),
     Copy(String),
     Regenerate(usize),
-    ToggleReasoning(usize),
+    ToggleReasoning(usize, bool),
     Created(Result<Chat, Error>),
     Saved(Result<Chat, Error>),
     Open(chat::Id),
@@ -75,7 +77,7 @@ pub enum Message {
     New,
     Search,
     ToggleSidebar,
-    LinkClicked(markdown::Url),
+    LinkClicked(Url),
 }
 
 pub enum Action {
@@ -224,7 +226,8 @@ impl Conversation {
 
                 self.input = text_editor::Content::new();
                 self.history.push(Item::User {
-                    content: Content::parse(content.to_owned()),
+                    content: content.to_owned(),
+                    markdown: Markdown::parse(content),
                 });
 
                 let (send, handle) = Task::sip(
@@ -252,13 +255,9 @@ impl Conversation {
 
                     Action::Run(snap_chat_to_end())
                 }
-                chat::Event::ReplyChanged {
-                    reply: new_reply,
-                    new_token,
-                } => {
+                chat::Event::ReplyChanged(new_reply) => {
                     if let Some(Item::Reply(reply)) = self.history.last_mut() {
                         reply.update(new_reply);
-                        reply.push(new_token);
                     }
 
                     Action::None
@@ -327,13 +326,9 @@ impl Conversation {
 
                 Action::Run(send)
             }
-            Message::ToggleReasoning(index) => {
-                if let Some(Item::Reply(Reply {
-                    reasoning: Some(reasoning),
-                    ..
-                })) = self.history.get_mut(index)
-                {
-                    reasoning.show = !reasoning.show;
+            Message::ToggleReasoning(index, show) => {
+                if let Some(Item::Reply(reply)) = self.history.get_mut(index) {
+                    reply.toggle_reasoning(show);
                 }
 
                 Action::None
@@ -839,70 +834,9 @@ impl History {
 
 #[derive(Debug)]
 pub enum Item {
-    User { content: Content },
+    User { content: String, markdown: Markdown },
     Reply(Reply),
     Plan(Plan),
-}
-
-#[derive(Debug, Default)]
-pub struct Reply {
-    reasoning: Option<Reasoning>,
-    content: Content,
-}
-
-impl Reply {
-    fn from_data(reply: assistant::Reply) -> Self {
-        Self {
-            reasoning: reply.reasoning.map(Reasoning::from_data),
-            content: Content::parse(reply.content),
-        }
-    }
-
-    fn to_data(&self) -> assistant::Reply {
-        assistant::Reply {
-            reasoning: self.reasoning.as_ref().map(Reasoning::to_data),
-            content: self.content.raw.clone(),
-        }
-    }
-
-    fn to_text(&self) -> String {
-        match &self.reasoning {
-            Some(reasoning) if reasoning.show => {
-                format!(
-                    "{reasoning}\n\n{content}",
-                    reasoning = reasoning
-                        .thoughts
-                        .iter()
-                        .map(|thought| format!("> {thought}"))
-                        .collect::<Vec<_>>()
-                        .join("\n>\n"),
-                    content = self.content.raw
-                )
-            }
-            _ => self.content.raw.clone(),
-        }
-    }
-
-    fn update(&mut self, new_reply: assistant::Reply) {
-        self.reasoning = new_reply.reasoning.map(Reasoning::from_data);
-        self.content.raw = new_reply.content;
-    }
-
-    fn push(&mut self, new_token: assistant::Token) {
-        if let Token::Talking(token) = new_token {
-            self.content.markdown.push_str(&token);
-        }
-    }
-
-    fn view(&self, index: usize, theme: &Theme) -> Element<Message> {
-        let message = markdown::view_with(self.content.markdown.items(), theme, &MarkdownViewer);
-
-        if let Some(reasoning) = &self.reasoning {
-            column![reasoning.view(index), message].spacing(20).into()
-        } else {
-            message.into()
-        }
-    }
 }
 
 #[derive(Debug, Default)]
@@ -957,12 +891,6 @@ impl Plan {
                         reply.update(new_reply);
                         reply
                     })));
-            }
-            plan::Event::Understanding(token) => {
-                if let Some(Outcome::Answer(plan::Status::Active(reply))) = self.outcomes.last_mut()
-                {
-                    reply.push(token);
-                }
             }
         }
     }
@@ -1038,7 +966,9 @@ impl Plan {
         };
 
         if let Some(reasoning) = &self.reasoning {
-            column![reasoning.view(index), steps].spacing(30).into()
+            column![reasoning.quote(Message::ToggleReasoning.with(index)), steps]
+                .spacing(30)
+                .into()
         } else {
             steps.into()
         }
@@ -1126,7 +1056,11 @@ impl Outcome {
         }
 
         fn reply<'a>(reply: &'a Reply, index: usize, theme: &Theme) -> Element<'a, Message> {
-            reply.view(index, theme)
+            reply.view(
+                theme,
+                Message::ToggleReasoning.with(index),
+                on_markdown_interaction,
+            )
         }
 
         match self {
@@ -1177,63 +1111,58 @@ impl Item {
         use iced::border;
 
         match self {
-            Self::User { content } => {
+            Self::User { markdown, .. } => {
                 let message = container(
-                    container(markdown::view_with(
-                        content.markdown.items(),
-                        theme,
-                        &MarkdownViewer,
-                    ))
-                    .style(|theme: &Theme| {
-                        let palette = theme.extended_palette();
+                    container(markdown.view(theme).map(on_markdown_interaction))
+                        .style(|theme: &Theme| {
+                            let palette = theme.extended_palette();
 
-                        container::Style {
-                            background: Some(palette.background.weak.color.into()),
-                            text_color: Some(palette.background.weak.text),
-                            border: border::rounded(10),
-                            ..container::Style::default()
-                        }
-                    })
-                    .padding(10),
+                            container::Style {
+                                background: Some(palette.background.weak.color.into()),
+                                text_color: Some(palette.background.weak.text),
+                                border: border::rounded(10),
+                                ..container::Style::default()
+                            }
+                        })
+                        .padding(10),
                 )
                 .padding(padding::all(20).left(30).right(0));
 
-                right(hover(message, center_y(copy(|| self.to_text())))).into()
+                right(hover(
+                    message,
+                    center_y(copy(|| Message::Copy(self.to_text()))),
+                ))
+                .into()
             }
-            Self::Reply(reply) => {
-                let actions = {
-                    let regenerate = action(icon::refresh(), "Regenerate", move || {
-                        Message::Regenerate(index)
-                    });
-
-                    row![copy(|| self.to_text()), regenerate].spacing(10)
-                };
-
-                hover(
-                    container(reply.view(index, theme)).padding([30, 0]),
-                    bottom(actions),
-                )
-            }
-            Self::Plan(plan) => {
-                let actions = {
-                    let regenerate = action(icon::refresh(), "Regenerate", move || {
-                        Message::Regenerate(index)
-                    });
-
-                    row![copy(|| self.to_text()), regenerate].spacing(10)
-                };
-
-                hover(
-                    container(plan.view(index, theme)).padding([30, 0]),
-                    bottom(actions),
-                )
-            }
+            Self::Reply(reply) => self.with_actions(
+                reply.view(
+                    theme,
+                    Message::ToggleReasoning.with(index),
+                    on_markdown_interaction,
+                ),
+                index,
+            ),
+            Self::Plan(plan) => self.with_actions(plan.view(index, theme), index),
         }
+    }
+
+    pub fn with_actions<'a>(
+        &'a self,
+        base: Element<'a, Message>,
+        index: usize,
+    ) -> Element<'a, Message> {
+        let actions = row![
+            copy(|| Message::Copy(self.to_text())),
+            regenerate(move || Message::Regenerate(index))
+        ]
+        .spacing(10);
+
+        hover(container(base).padding([30, 0]), bottom(actions))
     }
 
     pub fn to_text(&self) -> String {
         match self {
-            Self::User { content } => content.raw.clone(),
+            Self::User { content, .. } => content.clone(),
             Self::Reply(reply) => reply.to_text(),
             Self::Plan { .. } => {
                 // TODO
@@ -1245,7 +1174,8 @@ impl Item {
     fn from_data(item: chat::Item) -> Self {
         match item {
             chat::Item::User(content) => Item::User {
-                content: Content::parse(content),
+                markdown: Markdown::parse(&content),
+                content,
             },
             chat::Item::Reply(reply) => Self::Reply(Reply::from_data(reply)),
             chat::Item::Plan(plan) => Self::Plan(Plan::from_data(plan)),
@@ -1254,96 +1184,10 @@ impl Item {
 
     fn to_data(&self) -> chat::Item {
         match self {
-            Self::User { content, .. } => chat::Item::User(content.raw.clone()),
+            Self::User { content, .. } => chat::Item::User(content.clone()),
             Self::Reply(reply) => chat::Item::Reply(reply.to_data()),
             Self::Plan(plan) => chat::Item::Plan(plan.to_data()),
         }
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct Content {
-    raw: String,
-    markdown: markdown::Content,
-}
-
-impl Content {
-    pub fn parse(raw: String) -> Self {
-        let markdown = markdown::Content::parse(&raw);
-
-        Self { raw, markdown }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Reasoning {
-    thoughts: Vec<String>,
-    duration: Duration,
-    show: bool,
-}
-
-impl Reasoning {
-    fn from_data(reasoning: assistant::Reasoning) -> Self {
-        Self {
-            thoughts: reasoning.content.split("\n\n").map(str::to_owned).collect(),
-            duration: reasoning.duration,
-            show: true,
-        }
-    }
-
-    fn to_data(&self) -> assistant::Reasoning {
-        assistant::Reasoning {
-            content: self.thoughts.join("\n\n"),
-            duration: self.duration,
-        }
-    }
-
-    fn view(&self, index: usize) -> Element<'_, Message> {
-        let toggle = button(
-            row![
-                text!(
-                    "Thought for {duration} second{plural}",
-                    duration = self.duration.as_secs(),
-                    plural = if self.duration.as_secs() != 1 {
-                        "s"
-                    } else {
-                        ""
-                    }
-                )
-                .font(Font::MONOSPACE)
-                .size(12),
-                if self.show {
-                    icon::arrow_down()
-                } else {
-                    icon::arrow_up()
-                }
-                .size(12),
-            ]
-            .spacing(10),
-        )
-        .on_press(Message::ToggleReasoning(index))
-        .style(button::secondary);
-
-        let reasoning: Element<_> = if self.show {
-            let thoughts = column(self.thoughts.iter().map(|thought| {
-                text(thought)
-                    .size(12)
-                    .shaping(text::Shaping::Advanced)
-                    .into()
-            }))
-            .spacing(12);
-
-            column![
-                toggle,
-                row![vertical_rule(1), thoughts].spacing(10).height(Shrink)
-            ]
-            .spacing(10)
-            .into()
-        } else {
-            toggle.into()
-        };
-
-        reasoning
     }
 }
 
@@ -1353,53 +1197,9 @@ fn snap_chat_to_end() -> Task<Message> {
     scrollable::snap_to(CHAT, scrollable::RelativeOffset::END)
 }
 
-fn action<'a>(
-    icon: Text<'a>,
-    label: &'a str,
-    message: impl Fn() -> Message + 'a,
-) -> Element<'a, Message> {
-    tip(
-        button(icon)
-            .on_press_with(message)
-            .padding([2, 7])
-            .style(button::text),
-        label,
-        tip::Position::Bottom,
-    )
-}
-
-fn copy<'a>(to_text: impl Fn() -> String + 'a) -> Element<'a, Message> {
-    action(icon::clipboard(), "Copy", move || Message::Copy(to_text()))
-}
-
-struct MarkdownViewer;
-
-impl<'a> markdown::Viewer<'a, Message> for MarkdownViewer {
-    fn on_link_click(url: markdown::Url) -> Message {
-        Message::LinkClicked(url)
-    }
-
-    fn code_block(
-        &self,
-        settings: markdown::Settings,
-        _language: Option<&'a str>,
-        code: &'a str,
-        lines: &'a [markdown::Text],
-    ) -> Element<'a, Message> {
-        let code_block = markdown::code_block(settings, lines, Message::LinkClicked);
-
-        let copy = tip(
-            button(icon::clipboard().size(14))
-                .padding(2)
-                .on_press_with(|| Message::Copy(code.to_owned()))
-                .style(button::text),
-            "Copy",
-            tip::Position::Bottom,
-        );
-
-        hover(
-            code_block,
-            right(container(copy).style(container::dark)).padding(settings.code_size / 2),
-        )
+fn on_markdown_interaction(interaction: markdown::Interaction) -> Message {
+    match interaction {
+        markdown::Interaction::Open(url) => Message::LinkClicked(url),
+        markdown::Interaction::Copy(text) => Message::Copy(text),
     }
 }

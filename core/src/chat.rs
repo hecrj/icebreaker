@@ -174,7 +174,7 @@ impl fmt::Debug for Chat {
 #[derive(Debug, Clone)]
 pub enum Event {
     ReplyAdded,
-    ReplyChanged { reply: Reply, new_token: Token },
+    ReplyChanged(Reply),
     PlanAdded,
     PlanChanged(plan::Event),
 }
@@ -219,7 +219,7 @@ fn reply<'a>(
 
         let _reply = assistant
             .reply(SYSTEM_PROMPT, messages, &[])
-            .with(|(reply, new_token)| Event::ReplyChanged { reply, new_token })
+            .with(|(reply, _new_token)| Event::ReplyChanged(reply))
             .run(sender)
             .await;
 

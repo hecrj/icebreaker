@@ -3,6 +3,7 @@ use icebreaker_core as core;
 
 mod icon;
 mod screen;
+mod ui;
 mod widget;
 
 use crate::core::assistant;

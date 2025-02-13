@@ -396,6 +396,11 @@ impl Assistant {
                         Reply {
                             reasoning: reasoning.clone(),
                             content: content.trim().to_owned(),
+                            last_token: if let Token::Talking(token) = &token {
+                                Some(token.clone())
+                            } else {
+                                None
+                            },
                         },
                         token,
                     ))
@@ -405,6 +410,7 @@ impl Assistant {
             Ok(Reply {
                 reasoning: reasoning.clone(),
                 content: content.trim().to_owned(),
+                last_token: None,
             })
         })
     }
@@ -574,6 +580,7 @@ impl Message {
 pub struct Reply {
     pub reasoning: Option<Reasoning>,
     pub content: String,
+    pub last_token: Option<String>,
 }
 
 #[derive(Debug, Clone)]
