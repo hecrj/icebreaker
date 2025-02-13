@@ -1,19 +1,17 @@
-use crate::core;
 use crate::core::assistant::{Assistant, Backend, BootEvent};
 use crate::core::chat::{self, Chat, Entry, Id, Strategy};
 use crate::core::model::File;
-use crate::core::plan;
-use crate::core::{Error, Url};
+use crate::core::Error;
 use crate::icon;
 use crate::ui::markdown;
-use crate::ui::{Markdown, Reasoning, Reply};
+use crate::ui::plan;
+use crate::ui::{Markdown, Plan, Reply};
 use crate::widget::{copy, regenerate, tip};
 
 use iced::border;
 use iced::clipboard;
 use iced::padding;
 use iced::task::{self, Task};
-use iced::theme::palette;
 use iced::time::{self, Duration, Instant};
 use iced::widget::{
     self, bottom, bottom_center, button, center, center_x, center_y, column, container,
@@ -77,7 +75,8 @@ pub enum Message {
     New,
     Search,
     ToggleSidebar,
-    LinkClicked(Url),
+    Plan(usize, plan::Message),
+    Markdown(markdown::Interaction),
 }
 
 pub enum Action {
@@ -269,7 +268,7 @@ impl Conversation {
                 }
                 chat::Event::PlanChanged(event) => {
                     if let Some(Item::Plan(plan)) = self.history.last_mut() {
-                        plan.update(event);
+                        plan.apply(event);
                     }
 
                     Action::None
@@ -403,11 +402,14 @@ impl Conversation {
 
                 Action::None
             }
-            Message::LinkClicked(url) => {
-                let _ = open::that_in_background(url.to_string());
+            Message::Plan(index, message) => {
+                let Some(Item::Plan(plan)) = self.history.items.get_mut(index) else {
+                    return Action::None;
+                };
 
-                Action::None
+                Action::Run(plan.update(message).map(Message::Plan.with(index)))
             }
+            Message::Markdown(interaction) => Action::Run(interaction.perform()),
             Message::Booted(Err(error))
             | Message::Created(Err(error))
             | Message::Saved(Err(error))
@@ -839,273 +841,6 @@ pub enum Item {
     Plan(Plan),
 }
 
-#[derive(Debug, Default)]
-pub struct Plan {
-    reasoning: Option<Reasoning>,
-    steps: Vec<plan::Step>,
-    outcomes: Vec<Outcome>,
-}
-
-impl Plan {
-    fn from_data(plan: core::Plan) -> Self {
-        Self {
-            reasoning: plan.reasoning.map(Reasoning::from_data),
-            steps: plan.steps,
-            outcomes: plan.outcomes.into_iter().map(Outcome::from_data).collect(),
-        }
-    }
-
-    fn to_data(&self) -> core::Plan {
-        core::Plan {
-            reasoning: self.reasoning.as_ref().map(Reasoning::to_data),
-            steps: self.steps.clone(),
-            outcomes: self.outcomes.iter().map(Outcome::to_data).collect(),
-        }
-    }
-
-    fn update(&mut self, event: plan::Event) {
-        match event {
-            plan::Event::Designing(reasoning) => {
-                self.reasoning = Some(Reasoning::from_data(reasoning));
-            }
-            plan::Event::Designed(plan) => {
-                self.reasoning = plan.reasoning.map(Reasoning::from_data);
-                self.steps = plan.steps;
-            }
-            plan::Event::OutcomeAdded(outcome) => {
-                self.outcomes.push(Outcome::from_data(outcome));
-            }
-            plan::Event::OutcomeChanged(new_outcome) => {
-                let Some(Outcome::Answer(plan::Status::Active(mut reply))) = self.outcomes.pop()
-                else {
-                    self.outcomes.push(Outcome::from_data(new_outcome));
-                    return;
-                };
-
-                let plan::Outcome::Answer(new_status) = new_outcome else {
-                    return;
-                };
-
-                self.outcomes
-                    .push(Outcome::Answer(new_status.map(move |new_reply| {
-                        reply.update(new_reply);
-                        reply
-                    })));
-            }
-        }
-    }
-
-    fn view(&self, index: usize, theme: &Theme) -> Element<Message> {
-        let steps: Element<_> = if self.steps.is_empty() {
-            text("Designing a plan...")
-                .font(Font::MONOSPACE)
-                .width(Fill)
-                .center()
-                .into()
-        } else {
-            column(
-                self.steps
-                    .iter()
-                    .zip(
-                        self.outcomes
-                            .iter()
-                            .map(Some)
-                            .chain(std::iter::repeat(None)),
-                    )
-                    .enumerate()
-                    .map(|(n, (step, outcome))| {
-                        let status = outcome.map(Outcome::status).unwrap_or(Status::Pending);
-
-                        let text_style = match status {
-                            Status::Pending => text::default,
-                            Status::Active => text::primary,
-                            Status::Done => text::success,
-                            Status::Error => text::danger,
-                        };
-
-                        let number = center(
-                            text!("{}", n + 1)
-                                .size(12)
-                                .font(Font::MONOSPACE)
-                                .style(text_style),
-                        )
-                        .width(24)
-                        .height(24)
-                        .style(move |theme| {
-                            let pair = status.color(theme);
-
-                            container::Style::default()
-                                .border(border::rounded(8).color(pair.color).width(1))
-                        });
-
-                        let title = row![
-                            number,
-                            text(&step.description)
-                                .font(Font::MONOSPACE)
-                                .style(text_style)
-                        ]
-                        .spacing(20)
-                        .align_y(Center);
-
-                        let step: Element<_> = if let Some(outcome) = outcome {
-                            column![
-                                title,
-                                container(outcome.view(index, theme)).padding(padding::left(44))
-                            ]
-                            .spacing(10)
-                            .into()
-                        } else {
-                            title.into()
-                        };
-
-                        step
-                    }),
-            )
-            .spacing(30)
-            .into()
-        };
-
-        if let Some(reasoning) = &self.reasoning {
-            column![reasoning.quote(Message::ToggleReasoning.with(index)), steps]
-                .spacing(30)
-                .into()
-        } else {
-            steps.into()
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum Outcome {
-    Search(plan::Status<Vec<Url>>),
-    ScrapeText(plan::Status<Vec<String>>),
-    Answer(plan::Status<Reply>),
-}
-
-impl Outcome {
-    pub fn from_data(outcome: plan::Outcome) -> Self {
-        match outcome {
-            plan::Outcome::Search(status) => Self::Search(status),
-            plan::Outcome::ScrapeText(status) => Self::ScrapeText(status.map(|sites| {
-                sites
-                    .iter()
-                    .flat_map(|text| text.lines())
-                    .map(str::to_owned)
-                    .collect()
-            })),
-            plan::Outcome::Answer(status) => Self::Answer(status.map(Reply::from_data)),
-        }
-    }
-
-    pub fn to_data(&self) -> plan::Outcome {
-        match self {
-            Outcome::Search(status) => plan::Outcome::Search(status.clone()),
-            Outcome::ScrapeText(status) => plan::Outcome::ScrapeText(status.clone()),
-            Outcome::Answer(status) => plan::Outcome::Answer(status.as_ref().map(Reply::to_data)),
-        }
-    }
-
-    pub fn view(&self, index: usize, theme: &Theme) -> Element<Message> {
-        fn show_status<'a, T>(
-            status: &'a plan::Status<T>,
-            show: impl Fn(&'a T) -> Element<'a, Message>,
-        ) -> Element<'a, Message> {
-            status.result().map(show).unwrap_or_else(error)
-        }
-
-        fn error(error: &str) -> Element<Message> {
-            text(error).style(text::danger).font(Font::MONOSPACE).into()
-        }
-
-        fn links(links: &Vec<Url>) -> Element<Message> {
-            container(
-                container(
-                    column(
-                        links
-                            .iter()
-                            .map(|link| text(link.as_str()).size(12).font(Font::MONOSPACE).into()),
-                    )
-                    .spacing(5),
-                )
-                .width(Fill)
-                .padding(10)
-                .style(container::dark),
-            )
-            .into()
-        }
-
-        fn scraped_text(lines: &Vec<String>) -> Element<Message> {
-            container(
-                container(
-                    scrollable(
-                        column(
-                            lines
-                                .iter()
-                                .map(|line| text(line).size(12).font(Font::MONOSPACE).into()),
-                        )
-                        .spacing(5),
-                    )
-                    .spacing(5),
-                )
-                .width(Fill)
-                .padding(10)
-                .max_height(150)
-                .style(container::dark),
-            )
-            .into()
-        }
-
-        fn reply<'a>(reply: &'a Reply, index: usize, theme: &Theme) -> Element<'a, Message> {
-            reply.view(
-                theme,
-                Message::ToggleReasoning.with(index),
-                on_markdown_interaction,
-            )
-        }
-
-        match self {
-            Outcome::Search(status) => show_status(status, links),
-            Outcome::ScrapeText(status) => show_status(status, scraped_text),
-            Outcome::Answer(status) => show_status(status, |value| reply(value, index, theme)),
-        }
-    }
-
-    fn status(&self) -> Status {
-        let status = match self {
-            Outcome::Search(status) => status.as_ref().map(|_| ()),
-            Outcome::ScrapeText(status) => status.as_ref().map(|_| ()),
-            Outcome::Answer(status) => status.as_ref().map(|_| ()),
-        };
-
-        match status {
-            plan::Status::Active(_) => Status::Active,
-            plan::Status::Done(_) => Status::Done,
-            plan::Status::Errored(_) => Status::Error,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum Status {
-    Pending,
-    Active,
-    Error,
-    Done,
-}
-
-impl Status {
-    fn color(self, theme: &Theme) -> palette::Pair {
-        let palette = theme.extended_palette();
-
-        match self {
-            Status::Pending => palette.secondary.base,
-            Status::Active => palette.primary.base,
-            Status::Done => palette.success.base,
-            Status::Error => palette.danger.base,
-        }
-    }
-}
-
 impl Item {
     pub fn view<'a>(&'a self, index: usize, theme: &Theme) -> Element<'a, Message> {
         use iced::border;
@@ -1113,7 +848,7 @@ impl Item {
         match self {
             Self::User { markdown, .. } => {
                 let message = container(
-                    container(markdown.view(theme).map(on_markdown_interaction))
+                    container(markdown.view(theme).map(Message::Markdown))
                         .style(|theme: &Theme| {
                             let palette = theme.extended_palette();
 
@@ -1138,11 +873,13 @@ impl Item {
                 reply.view(
                     theme,
                     Message::ToggleReasoning.with(index),
-                    on_markdown_interaction,
+                    Message::Markdown,
                 ),
                 index,
             ),
-            Self::Plan(plan) => self.with_actions(plan.view(index, theme), index),
+            Self::Plan(plan) => {
+                self.with_actions(plan.view(theme).map(Message::Plan.with(index)), index)
+            }
         }
     }
 
@@ -1195,11 +932,4 @@ const CHAT: &str = "chat";
 
 fn snap_chat_to_end() -> Task<Message> {
     scrollable::snap_to(CHAT, scrollable::RelativeOffset::END)
-}
-
-fn on_markdown_interaction(interaction: markdown::Interaction) -> Message {
-    match interaction {
-        markdown::Interaction::Open(url) => Message::LinkClicked(url),
-        markdown::Interaction::Copy(text) => Message::Copy(text),
-    }
 }

@@ -1,7 +1,9 @@
+use crate::browser;
 use crate::widget::copy;
 
+use iced::clipboard;
 use iced::widget::{container, hover, markdown, right};
-use iced::{Element, Theme};
+use iced::{Element, Task, Theme};
 
 #[derive(Debug, Default)]
 pub struct Markdown {
@@ -30,6 +32,19 @@ struct Viewer;
 pub enum Interaction {
     Open(markdown::Url),
     Copy(String),
+}
+
+impl Interaction {
+    pub fn perform<Message>(self) -> Task<Message> {
+        match self {
+            Interaction::Open(url) => {
+                browser::open(&url);
+
+                Task::none()
+            }
+            Interaction::Copy(text) => clipboard::write(text),
+        }
+    }
 }
 
 impl<'a> markdown::Viewer<'a, Interaction> for Viewer {

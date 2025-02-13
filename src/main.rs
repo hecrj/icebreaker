@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use icebreaker_core as core;
 
+mod browser;
 mod icon;
 mod screen;
 mod ui;

@@ -17,7 +17,7 @@ impl Reasoning {
         Self {
             thoughts: reasoning.content.split("\n\n").map(str::to_owned).collect(),
             duration: reasoning.duration,
-            show: true,
+            show: false,
         }
     }
 
@@ -35,7 +35,7 @@ impl Reasoning {
         let toggle = button(
             row![
                 text!(
-                    "Thought for {duration} second{plural}",
+                    "Reasoned for {duration} second{plural}",
                     duration = self.duration.as_secs(),
                     plural = if self.duration.as_secs() != 1 {
                         "s"
