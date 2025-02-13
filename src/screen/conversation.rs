@@ -59,12 +59,12 @@ pub enum Message {
     InputResized(Size),
     ToggleSearch,
     Submit,
+    Regenerate(usize),
     Chatting(chat::Event),
     Chatted(Result<(), Error>),
     TitleChanging(String),
     TitleChanged(Result<String, Error>),
     Copy(String),
-    Regenerate(usize),
     ToggleReasoning(usize, bool),
     Created(Result<Chat, Error>),
     Saved(Result<Chat, Error>),
@@ -240,6 +240,24 @@ impl Conversation {
 
                 Action::Run(Task::batch([send, snap_chat_to_end()]))
             }
+            Message::Regenerate(index) => {
+                let State::Running { assistant, sending } = &mut self.state else {
+                    return Action::None;
+                };
+
+                self.history.truncate(index);
+
+                let (send, handle) = Task::sip(
+                    chat::complete(assistant, &self.history.to_data(), self.strategy),
+                    Message::Chatting,
+                    Message::Chatted,
+                )
+                .abortable();
+
+                *sending = Some(handle.abort_on_drop());
+
+                Action::Run(Task::batch([send, snap_chat_to_end()]))
+            }
             Message::TitleChanging(title) => {
                 self.title = Some(title);
                 Action::None
@@ -307,24 +325,6 @@ impl Conversation {
                 Action::None
             }
             Message::Copy(content) => Action::Run(clipboard::write(content)),
-            Message::Regenerate(index) => {
-                let State::Running { assistant, sending } = &mut self.state else {
-                    return Action::None;
-                };
-
-                self.history.truncate(index);
-
-                let (send, handle) = Task::sip(
-                    chat::complete(assistant, &self.history.to_data(), self.strategy),
-                    Message::Chatting,
-                    Message::Chatted,
-                )
-                .abortable();
-
-                *sending = Some(handle.abort_on_drop());
-
-                Action::Run(send)
-            }
             Message::ToggleReasoning(index, show) => {
                 if let Some(Item::Reply(reply)) = self.history.get_mut(index) {
                     reply.toggle_reasoning(show);
