@@ -368,10 +368,13 @@ async fn storage_dir() -> Result<PathBuf, io::Error> {
 fn history(items: &[Item]) -> Vec<assistant::Message> {
     items
         .iter()
-        .filter_map(|item| match item {
-            Item::User(query) => Some(assistant::Message::User(query.clone())),
-            Item::Reply(reply) => Some(assistant::Message::Assistant(reply.content.clone())),
-            Item::Plan(_plan) => None,
+        .flat_map(|item| match item {
+            Item::User(query) => vec![assistant::Message::User(query.clone())],
+            Item::Reply(reply) => vec![assistant::Message::Assistant(reply.content.clone())],
+            Item::Plan(plan) => plan
+                .answers()
+                .map(|reply| assistant::Message::Assistant(reply.content.clone()))
+                .collect(),
         })
         .collect()
 }

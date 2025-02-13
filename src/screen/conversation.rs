@@ -316,9 +316,10 @@ impl Conversation {
 
                 self.history.truncate(index);
 
-                let (send, handle) = Task::run(
+                let (send, handle) = Task::sip(
                     chat::complete(assistant, &self.history.to_data(), self.strategy),
                     Message::Chatting,
+                    Message::Chatted,
                 )
                 .abortable();
 
@@ -916,12 +917,7 @@ impl Plan {
         Self {
             reasoning: plan.reasoning.map(Reasoning::from_data),
             steps: plan.steps,
-            outcomes: plan
-                .execution
-                .outcomes
-                .into_iter()
-                .map(Outcome::from_data)
-                .collect(),
+            outcomes: plan.outcomes.into_iter().map(Outcome::from_data).collect(),
         }
     }
 
@@ -929,9 +925,7 @@ impl Plan {
         core::Plan {
             reasoning: self.reasoning.as_ref().map(Reasoning::to_data),
             steps: self.steps.clone(),
-            execution: plan::Execution {
-                outcomes: self.outcomes.iter().map(Outcome::to_data).collect(),
-            },
+            outcomes: self.outcomes.iter().map(Outcome::to_data).collect(),
         }
     }
 

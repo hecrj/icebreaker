@@ -146,12 +146,7 @@ impl Plan {
         Self {
             reasoning: plan.reasoning.map(Reasoning::from_data),
             steps: plan.steps.into_iter().map(Step::from_data).collect(),
-            outcomes: plan
-                .execution
-                .outcomes
-                .into_iter()
-                .map(Outcome::from_data)
-                .collect(),
+            outcomes: plan.outcomes.into_iter().map(Outcome::from_data).collect(),
         }
     }
 
@@ -159,9 +154,7 @@ impl Plan {
         crate::Plan {
             reasoning: self.reasoning.map(Reasoning::to_data),
             steps: self.steps.into_iter().map(Step::to_data).collect(),
-            execution: plan::Execution {
-                outcomes: self.outcomes.into_iter().map(Outcome::to_data).collect(),
-            },
+            outcomes: self.outcomes.into_iter().map(Outcome::to_data).collect(),
         }
     }
 }

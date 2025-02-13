@@ -11,7 +11,7 @@ use std::collections::HashMap;
 pub struct Plan {
     pub reasoning: Option<Reasoning>,
     pub steps: Vec<Step>,
-    pub execution: Execution,
+    pub outcomes: Vec<Outcome>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -76,7 +76,7 @@ pub enum Event {
 }
 
 impl Plan {
-    pub(crate) fn search<'a>(
+    pub fn search<'a>(
         assistant: &'a Assistant,
         history: &'a [Message],
     ) -> impl Straw<(), Event, Error> + 'a {
@@ -101,6 +101,13 @@ impl Plan {
             Ok(())
         })
     }
+
+    pub fn answers(&self) -> impl Iterator<Item = &Reply> {
+        self.outcomes.iter().filter_map(|outcome| match outcome {
+            Outcome::Answer(Status::Done(reply)) => Some(reply),
+            _ => None,
+        })
+    }
 }
 
 fn design<'a>(
@@ -109,7 +116,11 @@ fn design<'a>(
 ) -> impl Straw<Plan, Event, Error> + 'a {
     sipper(move |progress| async move {
         let reply = assistant
-            .reply(BROWSE_PROMPT, history, &[])
+            .reply(
+                "You are a helpful assistant.",
+                history,
+                &[Message::System(BROWSE_PROMPT.to_owned())],
+            )
             .filter_with(|(reply, _token)| reply.reasoning.map(Event::Designing))
             .run(progress)
             .await?;
@@ -123,10 +134,12 @@ fn design<'a>(
 
         let plan = steps.trim_start_matches("json").trim();
 
+        log::info!("Plan designed:\n{plan}");
+
         Ok(Plan {
-            steps: serde_json::from_str(plan)?,
             reasoning: reply.reasoning,
-            execution: Execution::default(),
+            steps: serde_json::from_str(plan)?,
+            outcomes: Vec::new(),
         })
     })
 }
@@ -136,7 +149,7 @@ fn execute<'a>(
     history: &'a [Message],
     query: &'a str,
     plan: &'a Plan,
-) -> impl Straw<Execution, Event, Error> + 'a {
+) -> impl Straw<Vec<Outcome>, Event, Error> + 'a {
     struct Process {
         outcomes: Vec<Outcome>,
         outputs: HashMap<String, Output>,
@@ -381,9 +394,7 @@ fn execute<'a>(
             }
         }
 
-        Ok(Execution {
-            outcomes: process.outcomes,
-        })
+        Ok(process.outcomes)
     })
 }
 
