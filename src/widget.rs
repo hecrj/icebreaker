@@ -1,10 +1,25 @@
-use crate::icon;
+mod diffused_text;
 
-use iced::widget::{button, container, text, tooltip, Text};
-use iced::Element;
+pub use diffused_text::DiffusedText;
 
 pub mod tip {
     pub use super::tooltip::Position;
+}
+
+use crate::icon;
+
+use iced::advanced;
+use iced::widget::{button, container, text, tooltip, Text};
+use iced::Element;
+
+pub fn diffused_text<'a, Theme, Renderer>(
+    fragment: impl text::IntoFragment<'a>,
+) -> DiffusedText<'a, Theme, Renderer>
+where
+    Theme: text::Catalog,
+    Renderer: advanced::text::Renderer,
+{
+    DiffusedText::new(fragment)
 }
 
 pub fn tip<'a, Message: 'a>(

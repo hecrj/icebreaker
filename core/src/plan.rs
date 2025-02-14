@@ -288,6 +288,7 @@ fn execute<'a>(
                     use futures::{FutureExt, StreamExt};
 
                     let mut output = BTreeMap::new();
+                    let mut order = Vec::new();
 
                     let links = process.links(&step.inputs);
 
@@ -313,9 +314,17 @@ fn execute<'a>(
                     while let Some((i, summary)) = scrape.sip().await {
                         let _ = output.insert(i, summary);
 
+                        if !order.contains(&i) {
+                            order.push(i);
+                        }
+
                         process
                             .update(Outcome::ScrapeText(Status::Active(
-                                output.values().cloned().collect(),
+                                order
+                                    .iter()
+                                    .filter_map(|i| output.get(i))
+                                    .cloned()
+                                    .collect(),
                             )))
                             .await;
                     }

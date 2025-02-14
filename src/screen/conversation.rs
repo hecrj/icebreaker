@@ -302,7 +302,7 @@ impl Conversation {
 
                     let messages: Vec<_> = self.history.to_data();
 
-                    if self.title.is_none() || messages.len() == 6 {
+                    if self.title.is_none() || messages.len() == 2 || messages.len() == 6 {
                         Action::Run(Task::sip(
                             chat::title(&assistant, &messages),
                             Message::TitleChanging,

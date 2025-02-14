@@ -11,11 +11,12 @@ repository = "https://github.com/hecrj/icebreaker"
 icebreaker_core.workspace = true
 itertools.workspace = true
 open.workspace = true
+rand.workspace = true
 tokio.workspace = true
 tracing-subscriber.workspace = true
 
 iced.workspace = true
-iced.features = ["tokio", "svg", "markdown", "highlighter", "system", "web-colors", "debug"]
+iced.features = ["tokio", "svg", "markdown", "highlighter", "system", "web-colors", "advanced", "debug"]
 
 [build-dependencies]
 iced_fontello = "0.13"
@@ -35,11 +36,12 @@ futures = "0.3"
 itertools = "0.13"
 log = "0.4"
 open = "5.2"
+rand = "0.9"
 reqwest = "0.12"
 scraper = "0.22"
 serde = "1.0"
 serde_json = "1.0"
-sipper = "0.1.0"
+sipper = "0.1"
 thiserror = "1.0"
 tokio = "1.38"
 tokio-stream = "0.1"

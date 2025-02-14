@@ -1,27 +1,34 @@
+use crate::browser;
 use crate::core::plan::{self, Event, Status, Step};
 use crate::core::web;
 use crate::core::{self, Url};
+use crate::icon;
 use crate::ui::markdown;
 use crate::ui::{Reasoning, Reply};
+use crate::widget::diffused_text;
 
 use iced::border;
-use iced::padding;
 use iced::theme;
-use iced::widget::{center, column, container, row, scrollable, text};
-use iced::{Center, Element, Fill, Font, Function, Task, Theme};
+use iced::time::seconds;
+use iced::widget::{
+    button, center, center_x, column, container, horizontal_space, row, scrollable, text,
+};
+use iced::{Bottom, Center, Element, Fill, Font, Function, Task, Theme};
 
 #[derive(Debug, Default)]
 pub struct Plan {
     reasoning: Option<Reasoning>,
     steps: Vec<Step>,
     outcomes: Vec<Outcome>,
+    active_step: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    ToggleReasoning(bool),
     ToggleAnswerReasoning(usize, bool),
     Markdown(markdown::Interaction),
+    OpenLink(Url),
+    ChangeStep(usize),
 }
 
 impl Plan {
@@ -30,6 +37,7 @@ impl Plan {
             reasoning: plan.reasoning.map(Reasoning::from_data),
             steps: plan.steps,
             outcomes: plan.outcomes.into_iter().map(Outcome::from_data).collect(),
+            active_step: None,
         }
     }
 
@@ -74,13 +82,6 @@ impl Plan {
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::ToggleReasoning(show) => {
-                if let Some(reasoning) = &mut self.reasoning {
-                    reasoning.show = show;
-                }
-
-                Task::none()
-            }
             Message::ToggleAnswerReasoning(index, show) => {
                 if let Some(Outcome::Answer(Status::Done(reply))) = self.outcomes.get_mut(index) {
                     reply.toggle_reasoning(show);
@@ -89,19 +90,36 @@ impl Plan {
                 Task::none()
             }
             Message::Markdown(interaction) => interaction.perform(),
+            Message::OpenLink(url) => {
+                browser::open(&url);
+
+                Task::none()
+            }
+            Message::ChangeStep(step) => {
+                self.active_step = Some(step);
+
+                Task::none()
+            }
         }
     }
 
     pub fn view(&self, theme: &Theme) -> Element<Message> {
         let steps: Element<_> = if self.steps.is_empty() {
-            text("Designing a plan...")
+            diffused_text("Designing a plan...")
+                .size(20)
                 .font(Font::MONOSPACE)
                 .width(Fill)
+                .duration(seconds(1))
                 .center()
                 .into()
         } else {
-            column(
-                self.steps
+            let active_step = self
+                .active_step
+                .unwrap_or(self.outcomes.len().saturating_sub(1));
+
+            let steps = center_x(
+                row(self
+                    .steps
                     .iter()
                     .zip(
                         self.outcomes
@@ -110,65 +128,83 @@ impl Plan {
                             .chain(std::iter::repeat(None)),
                     )
                     .enumerate()
-                    .map(|(n, (step, outcome))| {
+                    .flat_map(|(i, (_step, outcome))| {
                         let status = outcome.map(Outcome::stage).unwrap_or(Stage::Pending);
+                        let pair = status.color(theme);
 
-                        let text_style = match status {
-                            Stage::Pending => text::default,
-                            Stage::Active => text::primary,
-                            Stage::Done => text::success,
-                            Stage::Error => text::danger,
-                        };
+                        let number = center(text!("{}", i + 1).size(12).font(Font::MONOSPACE))
+                            .width(24)
+                            .height(24)
+                            .style(move |_theme| {
+                                let base = container::Style {
+                                    border: border::rounded(12).color(pair.color).width(1),
+                                    ..container::Style::default()
+                                };
 
-                        let number = center(
-                            text!("{}", n + 1)
-                                .size(12)
-                                .font(Font::MONOSPACE)
-                                .style(text_style),
-                        )
-                        .width(24)
-                        .height(24)
-                        .style(move |theme| {
-                            let pair = status.color(theme);
+                                if i == active_step {
+                                    container::Style {
+                                        background: Some(pair.color.into()),
+                                        text_color: Some(pair.text),
+                                        ..base
+                                    }
+                                } else {
+                                    container::Style {
+                                        text_color: Some(pair.color),
+                                        ..base
+                                    }
+                                }
+                            });
 
-                            container::Style::default()
-                                .border(border::rounded(8).color(pair.color).width(1))
-                        });
-
-                        let title = row![
-                            number,
-                            text(&step.description)
-                                .font(Font::MONOSPACE)
-                                .style(text_style)
-                        ]
-                        .spacing(20)
-                        .align_y(Center);
-
-                        let step: Element<_> = if let Some(outcome) = outcome {
-                            column![
-                                title,
-                                container(outcome.view(n, theme)).padding(padding::left(44))
-                            ]
-                            .spacing(10)
-                            .into()
+                        let number: Element<_> = if i == active_step {
+                            number.into()
                         } else {
-                            title.into()
+                            button(number)
+                                .on_press(Message::ChangeStep(i))
+                                .padding(0)
+                                .style(button::text)
+                                .into()
                         };
 
-                        step
-                    }),
-            )
-            .spacing(30)
-            .into()
+                        if i < self.steps.len() - 1 {
+                            vec![number, icon::arrow_right().color(pair.color).into()]
+                        } else {
+                            vec![number]
+                        }
+                    }))
+                .spacing(30)
+                .align_y(Center),
+            );
+
+            let current: Element<_> = self
+                .steps
+                .iter()
+                .zip(self.outcomes.iter())
+                .enumerate()
+                .nth(active_step)
+                .map(|(i, (step, outcome))| {
+                    let status = outcome.stage();
+
+                    let text_style = match status {
+                        Stage::Pending => text::default,
+                        Stage::Active => text::primary,
+                        Stage::Done => text::success,
+                        Stage::Error => text::danger,
+                    };
+
+                    let title = diffused_text(step.description.trim_matches('.'))
+                        .font(Font::MONOSPACE)
+                        .width(Fill)
+                        .align_x(Center)
+                        .style(text_style);
+
+                    column![title, outcome.view(i, theme)].spacing(20).into()
+                })
+                .unwrap_or_else(|| horizontal_space().into());
+
+            column![steps, current].spacing(10).into()
         };
 
-        if let Some(reasoning) = &self.reasoning {
-            column![reasoning.quote(Message::ToggleReasoning), steps]
-                .spacing(30)
-                .into()
-        } else {
-            steps.into()
-        }
+        steps.into()
     }
 }
 
@@ -199,7 +235,9 @@ impl Outcome {
     pub fn view(&self, index: usize, theme: &Theme) -> Element<Message> {
         match self {
             Outcome::Search(status) => show_status(status, links),
-            Outcome::ScrapeText(status) => show_status(status, summary_grid),
+            Outcome::ScrapeText(status) => {
+                show_status(status, |summaries| summary_grid(summaries, self.stage()))
+            }
             Outcome::Answer(status) => show_status(status, |value| reply(value, index, theme)),
         }
     }
@@ -252,52 +290,89 @@ fn error(error: &str) -> Element<Message> {
 }
 
 fn links(links: &Vec<Url>) -> Element<Message> {
-    container(
-        container(
-            column(
-                links
-                    .iter()
-                    .map(|link| text(link.as_str()).size(12).font(Font::MONOSPACE).into()),
-            )
+    if links.is_empty() {
+        return horizontal_space().into();
+    }
+
+    column(links.iter().map(|link| {
+        button(
+            column![
+                row![
+                    text(
+                        link.host_str()
+                            .unwrap_or(link.as_str())
+                            .trim_start_matches("www.")
+                    )
+                    .font(Font::MONOSPACE),
+                    icon::link().size(14)
+                ]
+                .align_y(Bottom)
+                .spacing(10),
+                text(link.path()).size(10).font(Font::MONOSPACE),
+            ]
             .spacing(5),
         )
-        .width(Fill)
-        .padding(10)
-        .style(container::dark),
-    )
+        .on_press_with(|| Message::OpenLink(link.clone()))
+        .padding(0)
+        .style(button::text)
+        .into()
+    }))
+    .spacing(20)
     .into()
 }
 
-fn summary_grid(summaries: &Vec<web::Summary>) -> Element<Message> {
-    fn summary(summary: &web::Summary) -> Element<Message> {
-        let title = text(summary.url.as_str())
-            .size(14)
+fn summary_grid(summaries: &Vec<web::Summary>, stage: Stage) -> Element<Message> {
+    fn summary(summary: &web::Summary, stage: Stage) -> Element<Message> {
+        let title = {
+            let domain = text(
+                summary
+                    .url
+                    .host_str()
+                    .unwrap_or(summary.url.as_str())
+                    .trim_start_matches("www."),
+            )
             .font(Font::MONOSPACE)
             .wrapping(text::Wrapping::None);
 
-        let content = scrollable(
-            column(
+            container(
+                button(
+                    row![domain, icon::link().size(14)]
+                        .spacing(10)
+                        .align_y(Bottom),
+                )
+                .on_press_with(|| Message::OpenLink(summary.url.clone()))
+                .padding(0)
+                .style(button::text),
+            )
+            .width(Fill)
+            .clip(true)
+        };
+
+        let content = {
+            let lines = column(
                 summary
                     .content
                     .lines()
                     .map(|line| text(line).size(12).font(Font::MONOSPACE).into()),
             )
             .width(Fill)
-            .spacing(5),
-        )
-        .spacing(5)
-        .anchor_bottom();
+            .spacing(5);
 
-        container(column![title, content].spacing(10))
-            .clip(true)
-            .width(Fill)
+            container(scrollable(lines).spacing(5).anchor_y(match stage {
+                Stage::Done => scrollable::Anchor::Start,
+                _ => scrollable::Anchor::End,
+            }))
+            .max_height(150)
             .padding(10)
-            .height(150)
             .style(container::dark)
-            .into()
+        };
+
+        column![title, content].spacing(5).into()
     }
 
-    column(summaries.iter().map(summary)).spacing(10).into()
+    column(summaries.iter().map(|item| summary(item, stage)))
+        .spacing(20)
+        .into()
 }
 
 fn reply<'a>(reply: &'a Reply, index: usize, theme: &Theme) -> Element<'a, Message> {

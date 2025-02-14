@@ -1,6 +1,6 @@
 // Generated automatically by iced_fontello at build time.
 // Do not edit manually. Source: ../fonts/icebreaker-icons.toml
-// 8635546ae4b9c1012cc1496d95ccfb5f2589eabdb70d3d8819771a3b8a355ba3
+// 37ea50ac3196af96666ffbcf488979b5f094c766c1584a049828c430d32a70da
 use iced::widget::{text, Text};
 use iced::Font;
 
@@ -8,6 +8,10 @@ pub const FONT: &[u8] = include_bytes!("../fonts/icebreaker-icons.ttf");
 
 pub fn arrow_down<'a>() -> Text<'a> {
     icon("\u{E75C}")
+}
+
+pub fn arrow_right<'a>() -> Text<'a> {
+    icon("\u{E75E}")
 }
 
 pub fn arrow_up<'a>() -> Text<'a> {
@@ -44,6 +48,10 @@ pub fn globe<'a>() -> Text<'a> {
 
 pub fn heart<'a>() -> Text<'a> {
     icon("\u{2665}")
+}
+
+pub fn link<'a>() -> Text<'a> {
+    icon("\u{F08E}")
 }
 
 pub fn refresh<'a>() -> Text<'a> {
