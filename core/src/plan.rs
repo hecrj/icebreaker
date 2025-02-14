@@ -423,4 +423,4 @@ The output should be in JSON:
     }
 ]
 ```
-Reply only with the plan in the given format. Provide the whole plan with all the steps. Say nothing else."#;
+Reply only with the plan in JSON."#;

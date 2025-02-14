@@ -62,13 +62,13 @@ pub fn summarize<'a>(
         let reply = assistant
             .reply(
                 "You are a helpful assistant.",
-                &[Message::User(dbg!(format!(
+                &[Message::User(format!(
                     "```\n\
                     {text}\n\
                     ```\n\n\
                     Please, summarize the parts of the previous text that \
                     are relevant to the query: \"{query}\"."
-                )))],
+                ))],
                 &[],
             )
             .with(|(reply, _token)| Summary {
