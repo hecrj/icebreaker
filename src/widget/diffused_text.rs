@@ -196,7 +196,7 @@ where
             state.content = self.fragment.clone().into_owned();
 
             state.animation = Animation::Ticking {
-                fragment: String::new(),
+                fragment: String::from("-"),
                 ticks: 0,
                 next_redraw: Instant::now(),
             };
@@ -308,7 +308,7 @@ where
                             shell.invalidate_layout();
                         }
 
-                        shell.request_redraw();
+                        shell.request_redraw_at(*next_redraw);
                     }
                     Animation::Done => {}
                 }

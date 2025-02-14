@@ -28,7 +28,7 @@ members = ["core"]
 icebreaker_core.path = "./core"
 
 iced.git = "https://github.com/iced-rs/iced.git"
-iced.rev = "f889008e21971b461ec7c54d9a7667a23f6ab35b"
+iced.rev = "cc8b326dfc84aaea3a570c9ad129eb8aaedfcb8c"
 
 chrono = "0.4"
 dirs = "6.0"
