@@ -1,4 +1,5 @@
 use crate::core::plan::{self, Event, Status, Step};
+use crate::core::web;
 use crate::core::{self, Url};
 use crate::ui::markdown;
 use crate::ui::{Reasoning, Reply};
@@ -174,7 +175,7 @@ impl Plan {
 #[derive(Debug)]
 pub enum Outcome {
     Search(Status<Vec<Url>>),
-    ScrapeText(Status<Vec<String>>),
+    ScrapeText(Status<Vec<web::Summary>>),
     Answer(Status<Reply>),
 }
 
@@ -182,13 +183,7 @@ impl Outcome {
     pub fn from_data(outcome: plan::Outcome) -> Self {
         match outcome {
             plan::Outcome::Search(status) => Self::Search(status),
-            plan::Outcome::ScrapeText(status) => Self::ScrapeText(status.map(|sites| {
-                sites
-                    .iter()
-                    .flat_map(|text| text.lines())
-                    .map(str::to_owned)
-                    .collect()
-            })),
+            plan::Outcome::ScrapeText(status) => Self::ScrapeText(status),
             plan::Outcome::Answer(status) => Self::Answer(status.map(Reply::from_data)),
         }
     }
@@ -204,7 +199,7 @@ impl Outcome {
     pub fn view(&self, index: usize, theme: &Theme) -> Element<Message> {
         match self {
             Outcome::Search(status) => show_status(status, links),
-            Outcome::ScrapeText(status) => show_status(status, scraped_text),
+            Outcome::ScrapeText(status) => show_status(status, summary_grid),
             Outcome::Answer(status) => show_status(status, |value| reply(value, index, theme)),
         }
     }
@@ -273,23 +268,36 @@ fn links(links: &Vec<Url>) -> Element<Message> {
     .into()
 }
 
-fn scraped_text(lines: &Vec<String>) -> Element<Message> {
-    container(
-        scrollable(
+fn summary_grid(summaries: &Vec<web::Summary>) -> Element<Message> {
+    fn summary(summary: &web::Summary) -> Element<Message> {
+        let title = text(summary.url.as_str())
+            .size(14)
+            .font(Font::MONOSPACE)
+            .wrapping(text::Wrapping::None);
+
+        let content = scrollable(
             column(
-                lines
-                    .iter()
+                summary
+                    .content
+                    .lines()
                     .map(|line| text(line).size(12).font(Font::MONOSPACE).into()),
             )
+            .width(Fill)
             .spacing(5),
         )
-        .spacing(5),
-    )
-    .width(Fill)
-    .padding(10)
-    .max_height(150)
-    .style(container::dark)
-    .into()
+        .spacing(5)
+        .anchor_bottom();
+
+        container(column![title, content].spacing(10))
+            .clip(true)
+            .width(Fill)
+            .padding(10)
+            .height(150)
+            .style(container::dark)
+            .into()
+    }
+
+    column(summaries.iter().map(summary)).spacing(10).into()
 }
 
 fn reply<'a>(reply: &'a Reply, index: usize, theme: &Theme) -> Element<'a, Message> {

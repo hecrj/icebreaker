@@ -2,6 +2,7 @@ use crate::assistant;
 use crate::chat::{Id, Item};
 use crate::model;
 use crate::plan;
+use crate::web;
 use crate::Url;
 
 use futures::never::Never;
@@ -180,7 +181,7 @@ impl Step {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Outcome {
     Search(Status<Vec<Url>>),
-    ScrapeText(Status<Vec<String>>),
+    ScrapeText(Status<WebSummaries>),
     Answer(Status<Reply>),
 }
 
@@ -188,7 +189,11 @@ impl Outcome {
     fn from_data(outcome: plan::Outcome) -> Self {
         match outcome {
             plan::Outcome::Search(status) => Self::Search(Status::from_data(status)),
-            plan::Outcome::ScrapeText(status) => Self::ScrapeText(Status::from_data(status)),
+            plan::Outcome::ScrapeText(status) => {
+                Self::ScrapeText(Status::from_data(status.map(|summaries| {
+                    WebSummaries::Known(summaries.into_iter().map(WebSummary::from_data).collect())
+                })))
+            }
             plan::Outcome::Answer(status) => {
                 Self::Answer(Status::from_data(status.map(Reply::from_data)))
             }
@@ -198,7 +203,17 @@ impl Outcome {
     fn to_data(self) -> plan::Outcome {
         match self {
             Self::Search(status) => plan::Outcome::Search(Status::to_data(status)),
-            Self::ScrapeText(status) => plan::Outcome::ScrapeText(Status::to_data(status)),
+            Self::ScrapeText(status) => plan::Outcome::ScrapeText(Status::to_data(status.map(
+                |summaries| match summaries {
+                    WebSummaries::Known(summaries) => {
+                        summaries.into_iter().map(WebSummary::to_data).collect()
+                    }
+                    WebSummaries::Uknown(lines) => vec![web::Summary {
+                        url: Url::parse("https://unknown.com/").expect("Parse URL"),
+                        content: lines.join("\n"),
+                    }],
+                },
+            ))),
             Self::Answer(status) => {
                 plan::Outcome::Answer(Status::to_data(status.map(Reply::to_data)))
             }
@@ -235,6 +250,35 @@ impl<T> Status<T> {
             Status::Active(value) => Status::Active(f(value)),
             Status::Done(value) => Status::Done(f(value)),
             Status::Errored(error) => Status::Errored(error),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum WebSummaries {
+    Known(Vec<WebSummary>),
+    #[serde(untagged)]
+    Uknown(Vec<String>),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebSummary {
+    url: Url,
+    content: String,
+}
+
+impl WebSummary {
+    fn from_data(summary: web::Summary) -> Self {
+        Self {
+            url: summary.url,
+            content: summary.content,
+        }
+    }
+
+    fn to_data(self) -> web::Summary {
+        web::Summary {
+            url: self.url,
+            content: self.content,
         }
     }
 }

@@ -7,6 +7,7 @@ use serde_json::json;
 use sipper::{sipper, FutureExt, Sipper, Straw, StreamExt};
 use tokio::process;
 
+use std::env;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -612,10 +613,12 @@ impl Server {
             Backend::Cuda | Backend::Rocm => "--gpu-layers 80",
         };
 
+        let custom_args = env::var("ICEBREAKER_LLAMA_CPP_ARGS").unwrap_or_default();
+
         let server = process::Command::new(executable)
             .args(Self::parse_args(&format!(
                 "--model models/{filename} \
-                    --port 8080 --host 0.0.0.0 {gpu_flags}",
+                    --port 8080 --host 0.0.0.0 {gpu_flags} {custom_args}",
                 filename = file.name,
             )))
             .kill_on_drop(true)

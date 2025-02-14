@@ -1,11 +1,12 @@
 use crate::assistant::{Assistant, Message, Reasoning, Reply};
+use crate::web;
 use crate::Error;
 
 use serde::Deserialize;
 use sipper::{sipper, Sender, Sipper, Straw};
 use url::Url;
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 #[derive(Debug, Clone, Default)]
 pub struct Plan {
@@ -25,7 +26,7 @@ pub struct Step {
 #[derive(Debug, Clone)]
 pub enum Outcome {
     Search(Status<Vec<Url>>),
-    ScrapeText(Status<Vec<String>>),
+    ScrapeText(Status<Vec<web::Summary>>),
     Answer(Status<Reply>),
 }
 
@@ -85,10 +86,10 @@ impl Plan {
                 return Ok(());
             };
 
-            let plan = design(assistant, &history).run(&progress).await?;
+            let plan = design(assistant, history).run(&progress).await?;
             progress.send(Event::Designed(plan.clone())).await;
 
-            execute(assistant, &history, query, &plan)
+            execute(assistant, history, query, &plan)
                 .run(progress)
                 .await?;
 
@@ -229,9 +230,15 @@ fn execute<'a>(
                     Output::Links(links.clone()),
                     Outcome::Search(Status::Done(links)),
                 ),
-                Outcome::ScrapeText(Status::Active(text)) => (
-                    Output::Text(text.clone()),
-                    Outcome::ScrapeText(Status::Done(text)),
+                Outcome::ScrapeText(Status::Active(summaries)) => (
+                    Output::Text(
+                        summaries
+                            .iter()
+                            .map(web::Summary::content)
+                            .map(str::to_owned)
+                            .collect(),
+                    ),
+                    Outcome::ScrapeText(Status::Done(summaries)),
                 ),
                 Outcome::Answer(Status::Active(reply)) => {
                     (Output::Answer, Outcome::Answer(Status::Done(reply)))
@@ -257,8 +264,6 @@ fn execute<'a>(
             sender: sender.clone(),
         };
 
-        let client = client();
-
         for (i, step) in plan.steps.iter().enumerate() {
             println!("Running: {}", step.description);
 
@@ -269,85 +274,70 @@ fn execute<'a>(
                     log::info!("Searching on DuckDuckGo: {query}");
                     process.start(Outcome::Search).await;
 
-                    let search_results = client
-                        .get("https://html.duckduckgo.com/html/")
-                        .version(reqwest::Version::HTTP_2)
-                        .query(&[("q", query)])
-                        .send()
-                        .await?
-                        .error_for_status()?
-                        .text()
-                        .await?;
+                    let search = web::search(query).await?;
+                    log::info!("-- Found: {results:?}", results = search.results);
 
-                    let links = {
-                        let html = scraper::Html::parse_document(&search_results);
-                        let selector = scraper::Selector::parse(".result__a").unwrap();
+                    process
+                        .update(Outcome::Search(Status::Active(search.results)))
+                        .await;
 
-                        html.select(&selector)
-                            .filter_map(|link| {
-                                let encoded = link.attr("href")?;
-
-                                if encoded.contains("ad_domain") {
-                                    return None;
-                                }
-
-                                reqwest::Url::parse(
-                                    &url::form_urlencoded::parse(encoded.as_bytes()).next()?.1,
-                                )
-                                .ok()
-                            })
-                            .take(1)
-                            .collect()
-                    };
-
-                    log::info!("-- Found: {links:?}");
-
-                    process.update(Outcome::Search(Status::Active(links))).await;
                     process.done(&step.evidence).await;
                 }
                 "scrape_text" => {
-                    let mut output = Vec::new();
+                    use futures::stream::FuturesUnordered;
+                    use futures::{FutureExt, StreamExt};
+
+                    let mut output = BTreeMap::new();
 
                     let links = process.links(&step.inputs);
-                    let candidates = scraper::Selector::parse("p, a").unwrap();
 
                     process.start(Outcome::ScrapeText).await;
 
-                    for link in links {
-                        log::info!("Scraping text: {link}");
+                    let mut scrape = sipper(move |sender| {
+                        links
+                            .iter()
+                            .cloned()
+                            .map(|link| web::summarize(assistant, query, link))
+                            .enumerate()
+                            .map(|(i, scrape)| {
+                                scrape
+                                    .with(move |progress| (i, progress))
+                                    .run(&sender)
+                                    .map(move |result| (i, result))
+                            })
+                            .collect::<FuturesUnordered<_>>()
+                            .collect::<Vec<_>>()
+                    })
+                    .pin();
 
-                        let html = client
-                            .get(link)
-                            .version(reqwest::Version::HTTP_2)
-                            .send()
-                            .await?
-                            .error_for_status()?
-                            .text()
-                            .await?;
+                    while let Some((i, summary)) = scrape.sip().await {
+                        let _ = output.insert(i, summary);
 
-                        log::info!("-- HTML retrieved ({} chars)", html.len());
-                        log::trace!("{}", html);
-
-                        let text = {
-                            let html = scraper::Html::parse_document(&html);
-
-                            let text = html
-                                .select(&candidates)
-                                .flat_map(|candidate| candidate.text())
-                                .map(str::trim)
-                                .filter(|text| !text.is_empty())
-                                .collect::<Vec<_>>();
-
-                            log::info!("-- Scraped {} lines of text", text.len());
-
-                            text.join("\n")
-                        };
-
-                        output.push(text);
                         process
-                            .update(Outcome::ScrapeText(Status::Active(output.clone())))
+                            .update(Outcome::ScrapeText(Status::Active(
+                                output.values().cloned().collect(),
+                            )))
                             .await;
                     }
+
+                    let summaries = scrape.await;
+
+                    for (i, summary) in summaries {
+                        match summary {
+                            Ok(summary) => {
+                                let _ = output.insert(i, summary);
+                            }
+                            Err(error) => {
+                                log::error!("Scraping failed: {error}");
+                            }
+                        }
+                    }
+
+                    process
+                        .update(Outcome::ScrapeText(Status::Active(
+                            output.values().cloned().collect(),
+                        )))
+                        .await;
 
                     process.done(&step.evidence).await;
                 }
@@ -389,29 +379,6 @@ fn execute<'a>(
 
         Ok(process.outcomes)
     })
-}
-
-fn client() -> reqwest::Client {
-    let headers = reqwest::header::HeaderMap::from_iter([
-        (
-            reqwest::header::USER_AGENT,
-            reqwest::header::HeaderValue::from_static(
-                "Mozilla/5.0 (X11; Linux x86_64) \
-                            AppleWebKit/537.36 (KHTML, like Gecko) \
-                            Chrome/132.0.0.0 Safari/537.36",
-            ),
-        ),
-        (
-            reqwest::header::ACCEPT,
-            reqwest::header::HeaderValue::from_static("*/*"),
-        ),
-    ]);
-
-    reqwest::Client::builder()
-        .use_rustls_tls()
-        .default_headers(headers)
-        .build()
-        .expect("Build reqwest client")
 }
 
 const BROWSE_PROMPT: &str = r#"Please construct a systematic plan to generate an optimal response to the user instruction, utilizing a set of provided actions. Each step will correspond to an evidence value, which will be the output of one of the available actions given an input string.

@@ -11,7 +11,7 @@ tokio-stream.workspace = true
 tokio-stream.features = ["io-util"]
 
 reqwest.workspace = true
-reqwest.features = ["json", "socks", "rustls-tls"]
+reqwest.features = ["json", "socks", "rustls-tls", "gzip"]
 
 serde.workspace = true
 serde.features = ["derive"]
