@@ -1,12 +1,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+use icebreaker_core as core;
 
-mod data;
+mod browser;
 mod icon;
 mod screen;
+mod ui;
 mod widget;
 
-use crate::data::assistant;
-use crate::data::{Chat, Error};
+use crate::core::assistant;
+use crate::core::{Chat, Error};
 use crate::screen::boot;
 use crate::screen::conversation;
 use crate::screen::search;
@@ -16,6 +18,8 @@ use iced::system;
 use iced::{Element, Subscription, Task, Theme};
 
 pub fn main() -> iced::Result {
+    tracing_subscriber::fmt::init();
+
     iced::application(Icebreaker::title, Icebreaker::update, Icebreaker::view)
         .font(icon::FONT)
         .subscription(Icebreaker::subscription)

@@ -1,8 +1,12 @@
-use crate::data::assistant::{self, Assistant, Backend, BootEvent, File};
-use crate::data::chat::{self, Chat, Entry, Id};
-use crate::data::Error;
+use crate::core::assistant::{Assistant, Backend, BootEvent};
+use crate::core::chat::{self, Chat, Entry, Id, Strategy};
+use crate::core::model::File;
+use crate::core::Error;
 use crate::icon;
-use crate::widget::tip;
+use crate::ui::markdown;
+use crate::ui::plan;
+use crate::ui::{Markdown, Plan, Reply};
+use crate::widget::{copy, regenerate, tip, toggle};
 
 use iced::border;
 use iced::clipboard;
@@ -11,10 +15,10 @@ use iced::task::{self, Task};
 use iced::time::{self, Duration, Instant};
 use iced::widget::{
     self, bottom, bottom_center, button, center, center_x, center_y, column, container,
-    horizontal_space, hover, markdown, pop, progress_bar, right, right_center, row, scrollable,
-    stack, text, text_editor, tooltip, value, vertical_rule, vertical_space, Text,
+    horizontal_space, hover, pop, progress_bar, right, right_center, row, scrollable, stack, text,
+    text_editor, tooltip, value, vertical_space,
 };
-use iced::{Center, Element, Fill, Font, Shrink, Size, Subscription, Theme};
+use iced::{Center, Element, Fill, Font, Function, Shrink, Size, Subscription, Theme};
 
 pub struct Conversation {
     backend: Backend,
@@ -25,6 +29,7 @@ pub struct Conversation {
     history: History,
     input: text_editor::Content,
     input_height: f32,
+    strategy: Strategy,
     error: Option<Error>,
     sidebar_open: bool,
 }
@@ -34,7 +39,7 @@ enum State {
         file: File,
         logs: Vec<String>,
         stage: String,
-        progress: u64,
+        progress: u32,
         tick: usize,
         _task: task::Handle,
     },
@@ -47,15 +52,20 @@ enum State {
 #[derive(Debug, Clone)]
 pub enum Message {
     ChatsListed(Result<Vec<Entry>, Error>),
-    Booting(Result<BootEvent, Error>),
+    Booting(BootEvent),
+    Booted(Result<Assistant, Error>),
     Tick(Instant),
     InputChanged(text_editor::Action),
     InputResized(Size),
+    ToggleSearch,
     Submit,
-    Chatting(Result<chat::Event, Error>),
-    Copy(String),
     Regenerate(usize),
-    ToggleReasoning(usize),
+    Chatting(chat::Event),
+    Chatted(Result<(), Error>),
+    TitleChanging(String),
+    TitleChanged(Result<String, Error>),
+    Copy(String),
+    ToggleReasoning(usize, bool),
     Created(Result<Chat, Error>),
     Saved(Result<Chat, Error>),
     Open(chat::Id),
@@ -65,7 +75,8 @@ pub enum Message {
     New,
     Search,
     ToggleSidebar,
-    LinkClicked(markdown::Url),
+    Plan(usize, plan::Message),
+    Markdown(markdown::Interaction),
 }
 
 pub enum Action {
@@ -76,8 +87,12 @@ pub enum Action {
 
 impl Conversation {
     pub fn new(file: File, backend: Backend) -> (Self, Task<Message>) {
-        let (boot, handle) =
-            Task::run(Assistant::boot(file.clone(), backend), Message::Booting).abortable();
+        let (boot, handle) = Task::sip(
+            Assistant::boot(file.clone(), backend),
+            Message::Booting,
+            Message::Booted,
+        )
+        .abortable();
 
         (
             Self {
@@ -95,6 +110,7 @@ impl Conversation {
                 history: History::new(),
                 input: text_editor::Content::new(),
                 input_height: 50.0,
+                strategy: Strategy::default(),
                 error: None,
                 chats: Vec::new(),
                 sidebar_open: true,
@@ -141,7 +157,7 @@ impl Conversation {
 
                 Action::None
             }
-            Message::Booting(Ok(event)) => match event {
+            Message::Booting(event) => match event {
                 BootEvent::Progressed {
                     stage: new_stage,
                     percent,
@@ -163,17 +179,12 @@ impl Conversation {
 
                     Action::None
                 }
-                BootEvent::Finished(assistant) => {
-                    self.state = State::Running {
-                        assistant,
-                        sending: None,
-                    };
-
-                    Action::None
-                }
             },
-            Message::Booting(Err(error)) => {
-                self.error = Some(error);
+            Message::Booted(Ok(assistant)) => {
+                self.state = State::Running {
+                    assistant,
+                    sending: None,
+                };
 
                 Action::None
             }
@@ -195,103 +206,116 @@ impl Conversation {
 
                 Action::None
             }
+            Message::ToggleSearch => {
+                self.strategy.search = !self.strategy.search;
+
+                Action::None
+            }
             Message::Submit => {
-                if let State::Running { assistant, sending } = &mut self.state {
-                    if let Some(message) = chat::Content::parse(&self.input.text()) {
-                        let (send, handle) = Task::run(
-                            chat::send(assistant, self.history.messages().collect(), message),
-                            Message::Chatting,
-                        )
-                        .abortable();
+                let State::Running { assistant, sending } = &mut self.state else {
+                    return Action::None;
+                };
 
-                        *sending = Some(handle.abort_on_drop());
+                let content = self.input.text();
+                let content = content.trim();
 
-                        Action::Run(send)
+                if content.is_empty() {
+                    return Action::None;
+                }
+
+                self.input = text_editor::Content::new();
+                self.history.push(Item::User {
+                    content: content.to_owned(),
+                    markdown: Markdown::parse(content),
+                });
+
+                let (send, handle) = Task::sip(
+                    chat::complete(assistant, &self.history.to_data(), self.strategy),
+                    Message::Chatting,
+                    Message::Chatted,
+                )
+                .abortable();
+
+                *sending = Some(handle.abort_on_drop());
+
+                Action::Run(Task::batch([send, snap_chat_to_end()]))
+            }
+            Message::Regenerate(index) => {
+                let State::Running { assistant, sending } = &mut self.state else {
+                    return Action::None;
+                };
+
+                self.history.truncate(index);
+
+                let (send, handle) = Task::sip(
+                    chat::complete(assistant, &self.history.to_data(), self.strategy),
+                    Message::Chatting,
+                    Message::Chatted,
+                )
+                .abortable();
+
+                *sending = Some(handle.abort_on_drop());
+
+                Action::Run(Task::batch([send, snap_chat_to_end()]))
+            }
+            Message::TitleChanging(title) => {
+                self.title = Some(title);
+                Action::None
+            }
+            Message::TitleChanged(Ok(title)) => {
+                self.title = Some(title);
+                self.save()
+            }
+            Message::Chatting(event) if !self.can_send() => match event {
+                chat::Event::ReplyAdded => {
+                    self.history.push(Item::Reply(Reply::default()));
+
+                    Action::Run(snap_chat_to_end())
+                }
+                chat::Event::ReplyChanged(new_reply) => {
+                    if let Some(Item::Reply(reply)) = self.history.last_mut() {
+                        reply.update(new_reply);
+                    }
+
+                    Action::None
+                }
+                chat::Event::PlanAdded => {
+                    self.history.push(Item::Plan(Plan::default()));
+
+                    Action::None
+                }
+                chat::Event::PlanChanged(event) => {
+                    if let Some(Item::Plan(plan)) = self.history.last_mut() {
+                        plan.apply(event);
+                    }
+
+                    Action::None
+                }
+            },
+            Message::Chatting(_outdated_event) => Action::None,
+            Message::Chatted(Ok(())) => {
+                if let State::Running {
+                    sending, assistant, ..
+                } = &mut self.state
+                {
+                    *sending = None;
+
+                    let messages: Vec<_> = self.history.to_data();
+
+                    if self.title.is_none() || messages.len() == 2 || messages.len() == 6 {
+                        Action::Run(Task::sip(
+                            chat::title(&assistant, &messages),
+                            Message::TitleChanging,
+                            Message::TitleChanged,
+                        ))
                     } else {
-                        Action::None
+                        self.save()
                     }
                 } else {
                     Action::None
                 }
             }
-            Message::Chatting(Ok(event)) if !self.can_send() => match event {
-                chat::Event::TitleChanged(title) => {
-                    self.title = Some(title);
-
-                    Action::None
-                }
-                chat::Event::MessageSent(message) => {
-                    self.history.push(message);
-                    self.input = text_editor::Content::new();
-
-                    Action::None
-                }
-                chat::Event::MessageAdded => {
-                    self.history.push(Item::Assistant {
-                        reasoning: None,
-                        content: String::new(),
-                        content_markdown: markdown::Content::new(),
-                    });
-
-                    Action::Run(snap_chat_to_end())
-                }
-                chat::Event::LastMessageChanged {
-                    reasoning: new_reasoning,
-                    content: new_content,
-                    new_token,
-                } => {
-                    if let Some(Item::Assistant {
-                        reasoning,
-                        content,
-                        content_markdown,
-                    }) = self.history.last_mut()
-                    {
-                        *reasoning = new_reasoning.map(Reasoning::from);
-                        *content = new_content;
-
-                        if let assistant::Token::Talking(token) = new_token {
-                            content_markdown.push_str(&token);
-                        }
-                    }
-
-                    Action::None
-                }
-                chat::Event::ExchangeOver => {
-                    if let State::Running {
-                        sending, assistant, ..
-                    } = &mut self.state
-                    {
-                        *sending = None;
-
-                        let messages = self.history.messages().collect();
-
-                        if let Some(id) = &self.id {
-                            Action::Run(Task::perform(
-                                Chat::save(
-                                    id.clone(),
-                                    assistant.file().clone(),
-                                    self.title.clone(),
-                                    messages,
-                                ),
-                                Message::Saved,
-                            ))
-                        } else {
-                            Action::Run(Task::perform(
-                                Chat::create(
-                                    assistant.file().clone(),
-                                    self.title.clone(),
-                                    messages,
-                                ),
-                                Message::Created,
-                            ))
-                        }
-                    } else {
-                        Action::None
-                    }
-                }
-            },
-            Message::Chatting(Ok(_outdated_event)) => Action::None,
-            Message::Chatting(Err(error)) => {
+            Message::Chatted(Err(error)) => {
                 self.error = Some(dbg!(error));
 
                 if let State::Running { sending, .. } = &mut self.state {
@@ -301,30 +325,9 @@ impl Conversation {
                 Action::None
             }
             Message::Copy(content) => Action::Run(clipboard::write(content)),
-            Message::Regenerate(index) => {
-                if let State::Running { assistant, sending } = &mut self.state {
-                    self.history.truncate(index);
-
-                    let (send, handle) = Task::run(
-                        chat::complete(assistant, self.history.messages().collect()),
-                        Message::Chatting,
-                    )
-                    .abortable();
-
-                    *sending = Some(handle.abort_on_drop());
-
-                    Action::Run(send)
-                } else {
-                    Action::None
-                }
-            }
-            Message::ToggleReasoning(index) => {
-                if let Some(Item::Assistant {
-                    reasoning: Some(reasoning),
-                    ..
-                }) = self.history.get_mut(index)
-                {
-                    reasoning.show = !reasoning.show;
+            Message::ToggleReasoning(index, show) => {
+                if let Some(Item::Reply(reply)) = self.history.get_mut(index) {
+                    reply.toggle_reasoning(show);
                 }
 
                 Action::None
@@ -333,11 +336,6 @@ impl Conversation {
                 self.id = Some(chat.id);
 
                 Action::Run(Task::perform(Chat::list(), Message::ChatsListed))
-            }
-            Message::Created(Err(error)) | Message::Saved(Err(error)) => {
-                self.error = Some(dbg!(error));
-
-                Action::None
             }
             Message::Open(chat) => {
                 Action::Run(Task::perform(Chat::fetch(chat), Message::ChatFetched))
@@ -364,18 +362,14 @@ impl Conversation {
                         Action::Run(Task::batch([widget::focus_next(), snap_chat_to_end()]))
                     }
                     _ => {
-                        let (conversation, task) = Self::open(chat, self.backend);
+                        let (mut conversation, task) = Self::open(chat, self.backend);
+                        conversation.input_height = self.input_height;
 
                         *self = conversation;
 
                         Action::Run(task)
                     }
                 }
-            }
-            Message::ChatFetched(Err(error)) => {
-                self.error = Some(dbg!(error));
-
-                Action::None
             }
             Message::New | Message::LastChatFetched(Err(_)) => {
                 self.id = None;
@@ -408,11 +402,52 @@ impl Conversation {
 
                 Action::None
             }
-            Message::LinkClicked(url) => {
-                let _ = open::that_in_background(url.to_string());
+            Message::Plan(index, message) => {
+                let Some(Item::Plan(plan)) = self.history.items.get_mut(index) else {
+                    return Action::None;
+                };
+
+                Action::Run(plan.update(message).map(Message::Plan.with(index)))
+            }
+            Message::Markdown(interaction) => Action::Run(interaction.perform()),
+            Message::Booted(Err(error))
+            | Message::Created(Err(error))
+            | Message::Saved(Err(error))
+            | Message::TitleChanged(Err(error))
+            | Message::ChatFetched(Err(error)) => {
+                self.error = Some(dbg!(error));
 
                 Action::None
             }
+        }
+    }
+
+    pub fn save(&self) -> Action {
+        let State::Running { assistant, sending } = &self.state else {
+            return Action::None;
+        };
+
+        if sending.is_some() {
+            return Action::None;
+        }
+
+        let items = self.history.to_data();
+
+        if let Some(id) = &self.id {
+            Action::Run(Task::perform(
+                Chat::save(
+                    id.clone(),
+                    assistant.file().clone(),
+                    self.title.clone(),
+                    items,
+                ),
+                Message::Saved,
+            ))
+        } else {
+            Action::Run(Task::perform(
+                Chat::create(assistant.file().clone(), self.title.clone(), items),
+                Message::Created,
+            ))
         }
     }
 
@@ -583,11 +618,11 @@ impl Conversation {
             .into()
         };
 
-        let input = container(
-            text_editor(&self.input)
+        let input = {
+            let editor = text_editor(&self.input)
                 .placeholder("Type your message here...")
                 .on_action(Message::InputChanged)
-                .padding(10)
+                .padding(padding::all(10).bottom(50))
                 .min_height(51)
                 .max_height(16.0 * 1.3 * 20.0) // approx. 20 lines with 1.3 line height
                 .key_binding(|key_press| {
@@ -599,10 +634,23 @@ impl Conversation {
                         }
                         binding => binding,
                     }
-                }),
-        )
-        .width(Shrink)
-        .max_width(600);
+                });
+
+            let strategy = {
+                let search = tip(
+                    toggle(icon::globe(), "Search", self.strategy.search)
+                        .on_press(Message::ToggleSearch),
+                    "Very Experimental!",
+                    tip::Position::Right,
+                );
+
+                bottom(search).padding(10)
+            };
+
+            container(stack![editor, strategy])
+                .width(Shrink)
+                .max_width(600)
+        };
 
         let chat = stack![
             column![header, messages].spacing(10).align_x(Center),
@@ -710,9 +758,9 @@ impl History {
         Self { items: Vec::new() }
     }
 
-    pub fn restore(messages: impl IntoIterator<Item = assistant::Message>) -> Self {
+    pub fn restore(items: impl IntoIterator<Item = chat::Item>) -> Self {
         Self {
-            items: messages.into_iter().map(Item::from).collect(),
+            items: items.into_iter().map(Item::from_data).collect(),
         }
     }
 
@@ -740,102 +788,27 @@ impl History {
         self.items.truncate(amount);
     }
 
-    pub fn messages<'a>(&'a self) -> impl Iterator<Item = assistant::Message> + 'a {
-        self.items.iter().map(Item::to_message)
+    pub fn to_data<'a>(&'a self) -> Vec<chat::Item> {
+        // TODO: Cache
+        self.items.iter().map(Item::to_data).collect()
     }
 }
 
 #[derive(Debug)]
 pub enum Item {
-    User {
-        content: String,
-        markdown: Vec<markdown::Item>,
-    },
-    Assistant {
-        reasoning: Option<Reasoning>,
-        content: String,
-        content_markdown: markdown::Content,
-    },
+    User { content: String, markdown: Markdown },
+    Reply(Reply),
+    Plan(Plan),
 }
 
 impl Item {
     pub fn view<'a>(&'a self, index: usize, theme: &Theme) -> Element<'a, Message> {
         use iced::border;
 
-        let copy = action(icon::clipboard(), "Copy", || Message::Copy(self.to_text()));
-
         match self {
-            Self::Assistant {
-                reasoning,
-                content,
-                content_markdown,
-                ..
-            } => {
-                let message = markdown::view_with(content_markdown.items(), theme, &MarkdownViewer);
-
-                let message: Element<_> = if let Some(reasoning) = reasoning {
-                    let toggle = button(
-                        row![
-                            text!(
-                                "Thought for {duration} second{plural}",
-                                duration = reasoning.duration.as_secs(),
-                                plural = if reasoning.duration.as_secs() != 1 {
-                                    "s"
-                                } else {
-                                    ""
-                                }
-                            )
-                            .font(Font::MONOSPACE)
-                            .size(12),
-                            if reasoning.show {
-                                icon::arrow_down()
-                            } else {
-                                icon::arrow_up()
-                            }
-                            .size(12),
-                        ]
-                        .spacing(10),
-                    )
-                    .on_press(Message::ToggleReasoning(index))
-                    .style(button::secondary);
-
-                    let reasoning: Element<_> = if reasoning.show || content.is_empty() {
-                        let thoughts = column(reasoning.thoughts.iter().map(|thought| {
-                            text(thought)
-                                .size(12)
-                                .shaping(text::Shaping::Advanced)
-                                .into()
-                        }))
-                        .spacing(12);
-
-                        column![
-                            toggle,
-                            row![vertical_rule(1), thoughts].spacing(10).height(Shrink)
-                        ]
-                        .spacing(10)
-                        .into()
-                    } else {
-                        toggle.into()
-                    };
-
-                    column![reasoning, message].spacing(20).into()
-                } else {
-                    message.into()
-                };
-
-                let regenerate = action(icon::refresh(), "Regenerate", move || {
-                    Message::Regenerate(index)
-                });
-
-                let actions = row![copy, regenerate].spacing(10);
-
-                hover(container(message).padding([30, 0]), bottom(actions))
-            }
-            Self::User {
-                markdown: content, ..
-            } => {
+            Self::User { markdown, .. } => {
                 let message = container(
-                    container(markdown::view_with(content, theme, &MarkdownViewer))
+                    container(markdown.view(theme).map(Message::Markdown))
                         .style(|theme: &Theme| {
                             let palette = theme.extended_palette();
 
@@ -850,78 +823,67 @@ impl Item {
                 )
                 .padding(padding::all(20).left(30).right(0));
 
-                right(hover(message, center_y(copy))).into()
+                right(hover(
+                    message,
+                    center_y(copy(|| Message::Copy(self.to_text()))),
+                ))
+                .into()
+            }
+            Self::Reply(reply) => self.with_actions(
+                reply.view(
+                    theme,
+                    Message::ToggleReasoning.with(index),
+                    Message::Markdown,
+                ),
+                index,
+            ),
+            Self::Plan(plan) => {
+                self.with_actions(plan.view(theme).map(Message::Plan.with(index)), index)
             }
         }
+    }
+
+    pub fn with_actions<'a>(
+        &'a self,
+        base: Element<'a, Message>,
+        index: usize,
+    ) -> Element<'a, Message> {
+        let actions = row![
+            copy(|| Message::Copy(self.to_text())),
+            regenerate(move || Message::Regenerate(index))
+        ]
+        .spacing(10);
+
+        hover(container(base).padding([30, 0]), bottom(actions))
     }
 
     pub fn to_text(&self) -> String {
         match self {
             Self::User { content, .. } => content.clone(),
-            Self::Assistant {
-                reasoning, content, ..
-            } => match reasoning {
-                Some(reasoning) if reasoning.show => {
-                    format!(
-                        "Reasoning:\n{}\n\n{content}",
-                        reasoning.thoughts.join("\n\n")
-                    )
-                }
-                _ => content.clone(),
-            },
+            Self::Reply(reply) => reply.to_text(),
+            Self::Plan { .. } => {
+                // TODO
+                "TODO".to_owned()
+            }
         }
     }
 
-    fn to_message(&self) -> assistant::Message {
+    fn from_data(item: chat::Item) -> Self {
+        match item {
+            chat::Item::User(content) => Item::User {
+                markdown: Markdown::parse(&content),
+                content,
+            },
+            chat::Item::Reply(reply) => Self::Reply(Reply::from_data(reply)),
+            chat::Item::Plan(plan) => Self::Plan(Plan::from_data(plan)),
+        }
+    }
+
+    fn to_data(&self) -> chat::Item {
         match self {
-            Self::User { content, .. } => assistant::Message::User(content.clone()),
-            Self::Assistant {
-                reasoning, content, ..
-            } => assistant::Message::Assistant {
-                reasoning: reasoning.as_ref().map(|reasoning| assistant::Reasoning {
-                    content: reasoning.thoughts.join("\n\n"),
-                    duration: reasoning.duration,
-                }),
-                content: content.clone(),
-            },
-        }
-    }
-}
-
-impl From<assistant::Message> for Item {
-    fn from(message: assistant::Message) -> Self {
-        match message {
-            assistant::Message::Assistant { reasoning, content } => {
-                let content_markdown = markdown::Content::parse(&content);
-
-                Item::Assistant {
-                    reasoning: reasoning.map(Reasoning::from),
-                    content,
-                    content_markdown,
-                }
-            }
-            assistant::Message::User(content) => {
-                let markdown = markdown::parse(&content).collect();
-
-                Item::User { content, markdown }
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Reasoning {
-    thoughts: Vec<String>,
-    duration: Duration,
-    show: bool,
-}
-
-impl From<assistant::Reasoning> for Reasoning {
-    fn from(reasoning: assistant::Reasoning) -> Self {
-        Self {
-            thoughts: reasoning.content.split("\n\n").map(str::to_owned).collect(),
-            duration: reasoning.duration,
-            show: true,
+            Self::User { content, .. } => chat::Item::User(content.clone()),
+            Self::Reply(reply) => chat::Item::Reply(reply.to_data()),
+            Self::Plan(plan) => chat::Item::Plan(plan.to_data()),
         }
     }
 }
@@ -930,51 +892,4 @@ const CHAT: &str = "chat";
 
 fn snap_chat_to_end() -> Task<Message> {
     scrollable::snap_to(CHAT, scrollable::RelativeOffset::END)
-}
-
-fn action<'a>(
-    icon: Text<'a>,
-    label: &'a str,
-    message: impl Fn() -> Message + 'a,
-) -> Element<'a, Message> {
-    tip(
-        button(icon)
-            .on_press_with(message)
-            .padding([2, 7])
-            .style(button::text),
-        label,
-        tip::Position::Bottom,
-    )
-}
-
-struct MarkdownViewer;
-
-impl<'a> markdown::Viewer<'a, Message> for MarkdownViewer {
-    fn on_link_click(url: markdown::Url) -> Message {
-        Message::LinkClicked(url)
-    }
-
-    fn code_block(
-        &self,
-        settings: markdown::Settings,
-        _language: Option<&'a str>,
-        code: &'a str,
-        lines: &'a [markdown::Text],
-    ) -> Element<'a, Message> {
-        let code_block = markdown::code_block(settings, lines, Message::LinkClicked);
-
-        let copy = tip(
-            button(icon::clipboard().size(14))
-                .padding(2)
-                .on_press_with(|| Message::Copy(code.to_owned()))
-                .style(button::text),
-            "Copy",
-            tip::Position::Bottom,
-        );
-
-        hover(
-            code_block,
-            right(container(copy).style(container::dark)).padding(settings.code_size / 2),
-        )
-    }
 }

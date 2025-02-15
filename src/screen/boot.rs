@@ -1,4 +1,5 @@
-use crate::data::assistant::{Backend, File, Model};
+use crate::core::assistant::Backend;
+use crate::core::model::{File, Model};
 use crate::widget::tip;
 
 use iced::system;
