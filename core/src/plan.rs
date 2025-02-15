@@ -379,14 +379,19 @@ fn execute<'a>(
 
                     let outputs = process.text(&step.inputs).join("\n\n");
 
-                    let query = [Message::System(format!(
-                        "In order to figure out the user's request, you have already performed certain actions to \
-                        gather information. Here is a summary of the steps executed so far:\n\
+                    let query = [
+                        Message::System(format!(
+                            "In order to figure out the user's request, you have already \
+                        performed certain actions to  gather information. Here is a \
+                        summary of the steps executed so far:\n\
                         \n\
                         {steps}\n\n\
-                        The relevant outputs of the actions considered relevant to the user request are provided next:\n\
-                        {outputs}")),
-                 Message::User(query.to_owned())];
+                        The outputs of the actions considered relevant to the user request \
+                        are provided next:\n\
+                        {outputs}"
+                        )),
+                        Message::User(query.to_owned()),
+                    ];
 
                     let mut reply = assistant
                         .reply("You are a helpful assistant.", history, &query)
