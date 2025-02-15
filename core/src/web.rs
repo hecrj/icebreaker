@@ -23,7 +23,6 @@ impl Summary {
 pub async fn search(query: &str) -> Result<Search, Error> {
     let search_results = CLIENT
         .get("https://html.duckduckgo.com/html/")
-        .version(reqwest::Version::HTTP_2)
         .query(&[("q", query)])
         .send()
         .await?
@@ -92,7 +91,6 @@ async fn scrape(url: Url) -> Result<String, Error> {
 
     let html = CLIENT
         .get(url.clone())
-        .version(reqwest::Version::HTTP_2)
         .send()
         .await?
         .error_for_status()?
