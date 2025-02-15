@@ -86,7 +86,23 @@ impl Plan {
                 return Ok(());
             };
 
-            let plan = design(assistant, history).run(&progress).await?;
+            let plan = {
+                let mut attempt = 0;
+
+                loop {
+                    log::info!("Designing plan ({attempt})...");
+
+                    match design(assistant, history).run(&progress).await {
+                        Err(error) if attempt < 3 => {
+                            log::warn!("Plan design failed: {error}");
+                        }
+                        result => break result?,
+                    }
+
+                    attempt += 1;
+                }
+            };
+
             progress.send(Event::Designed(plan.clone())).await;
 
             execute(assistant, history, query, &plan)
