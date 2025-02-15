@@ -281,7 +281,7 @@ fn execute<'a>(
         };
 
         for (i, step) in plan.steps.iter().enumerate() {
-            println!("Running: {}", step.description);
+            log::info!("Running: {}", step.description);
 
             match step.function.as_str() {
                 "search" => {
