@@ -382,13 +382,14 @@ fn execute<'a>(
                     let query = [
                         Message::System(format!(
                             "In order to figure out the user's request, you have already \
-                        performed certain actions to  gather information. Here is a \
+                        performed certain actions to gather information. Here is a \
                         summary of the steps executed so far:\n\
                         \n\
                         {steps}\n\n\
                         The outputs of the actions considered relevant to the user request \
                         are provided next:\n\
-                        {outputs}"
+                        {outputs}\n\
+                        Analyze the outputs carefully before replying to the user."
                         )),
                         Message::User(query.to_owned()),
                     ];
