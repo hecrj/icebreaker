@@ -21,6 +21,8 @@ impl Summary {
 }
 
 pub async fn search(query: &str) -> Result<Search, Error> {
+    log::info!("Searching on DuckDuckGo: {query}");
+
     let search_results = CLIENT
         .get("https://html.duckduckgo.com/html/")
         .query(&[("q", query)])
@@ -46,6 +48,8 @@ pub async fn search(query: &str) -> Result<Search, Error> {
         })
         .take(5)
         .collect();
+
+    log::info!("-- Found: {results:?}");
 
     Ok(Search { results })
 }

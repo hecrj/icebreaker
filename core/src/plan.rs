@@ -287,11 +287,9 @@ fn execute<'a>(
                 "search" => {
                     let query = step.inputs.first().map(String::as_str).unwrap_or_default();
 
-                    log::info!("Searching on DuckDuckGo: {query}");
                     process.start(Outcome::Search).await;
 
                     let search = web::search(query).await?;
-                    log::info!("-- Found: {results:?}", results = search.results);
 
                     process
                         .update(Outcome::Search(Status::Active(search.results)))
