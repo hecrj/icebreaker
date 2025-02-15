@@ -6,7 +6,7 @@ use crate::icon;
 use crate::ui::markdown;
 use crate::ui::plan;
 use crate::ui::{Markdown, Plan, Reply};
-use crate::widget::{copy, regenerate, tip};
+use crate::widget::{copy, regenerate, tip, toggle};
 
 use iced::border;
 use iced::clipboard;
@@ -637,52 +637,12 @@ impl Conversation {
                 });
 
             let strategy = {
-                let strategy = self.strategy;
-
-                let search = button(
-                    row![icon::globe().size(12), text("Search").size(12)]
-                        .spacing(8)
-                        .height(Fill)
-                        .align_y(Center),
-                )
-                .height(30)
-                .on_press(Message::ToggleSearch)
-                .style(move |theme: &Theme, status| {
-                    if strategy.search {
-                        button::Style {
-                            border: border::rounded(5),
-                            ..button::primary(
-                                theme,
-                                match status {
-                                    button::Status::Active => button::Status::Hovered,
-                                    button::Status::Hovered => button::Status::Active,
-                                    _ => status,
-                                },
-                            )
-                        }
-                    } else {
-                        let palette = theme.extended_palette();
-
-                        let base = button::Style {
-                            text_color: palette.background.base.text,
-                            border: border::rounded(5)
-                                .width(1)
-                                .color(palette.background.base.text),
-                            ..button::Style::default()
-                        };
-
-                        match status {
-                            button::Status::Active | button::Status::Pressed => base,
-                            button::Status::Hovered => button::Style {
-                                background: Some(
-                                    palette.background.base.text.scale_alpha(0.2).into(),
-                                ),
-                                ..base
-                            },
-                            button::Status::Disabled => button::Style::default(),
-                        }
-                    }
-                });
+                let search = tip(
+                    toggle(icon::globe(), "Search", self.strategy.search)
+                        .on_press(Message::ToggleSearch),
+                    "Very Experimental!",
+                    tip::Position::Right,
+                );
 
                 bottom(search).padding(10)
             };
