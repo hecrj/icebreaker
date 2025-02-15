@@ -51,6 +51,10 @@ impl Reply {
         self.reasoning = new_reply.reasoning.map(Reasoning::from_data);
         self.content = new_reply.content;
 
+        if let Some(reasoning) = &mut self.reasoning {
+            reasoning.show = new_reply.last_token.is_none();
+        }
+
         if let Some(token) = new_reply.last_token {
             self.markdown.push_str(&token);
         }
