@@ -77,14 +77,19 @@ impl Icebreaker {
                 let backend = assistant::Backend::detect(&system.graphics_adapter);
                 self.system = Some(*system);
 
-                if let Ok(last_chat) = last_chat {
-                    let (conversation, task) = screen::Conversation::open(last_chat, backend);
+                match last_chat {
+                    Ok(last_chat) => {
+                        let (conversation, task) = screen::Conversation::open(last_chat, backend);
 
-                    self.screen = Screen::Conversation(conversation);
+                        self.screen = Screen::Conversation(conversation);
 
-                    task.map(Message::Conversation)
-                } else {
-                    self.search()
+                        task.map(Message::Conversation)
+                    }
+                    Err(error) => {
+                        log::error!("{error}");
+
+                        self.search()
+                    }
                 }
             }
             Message::Search(message) => {

@@ -435,12 +435,13 @@ impl Conversation {
 
         if let Some(id) = &self.id {
             Action::Run(Task::perform(
-                Chat::save(
-                    id.clone(),
-                    assistant.file().clone(),
-                    self.title.clone(),
-                    items,
-                ),
+                Chat {
+                    id: id.clone(),
+                    file: assistant.file().clone(),
+                    title: self.title.clone(),
+                    history: items,
+                }
+                .save(),
                 Message::Saved,
             ))
         } else {

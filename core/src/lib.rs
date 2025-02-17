@@ -27,7 +27,9 @@ pub enum Error {
     #[error("executor failed: {0}")]
     ExecutorFailed(&'static str),
     #[error("deserialization failed: {0}")]
-    DecodingFailed(Arc<serde_json::Error>),
+    SerdeFailed(Arc<serde_json::Error>),
+    #[error("deserialization failed")]
+    DecoderFailed(Arc<decoder::Error>),
     #[error("task join failed: {0}")]
     JoinFailed(Arc<task::JoinError>),
     #[error("no suitable executor was found: neither llama-server nor docker are installed")]
@@ -48,7 +50,13 @@ impl From<io::Error> for Error {
 
 impl From<serde_json::Error> for Error {
     fn from(error: serde_json::Error) -> Self {
-        Self::DecodingFailed(Arc::new(error))
+        Self::SerdeFailed(Arc::new(error))
+    }
+}
+
+impl From<decoder::Error> for Error {
+    fn from(error: decoder::Error) -> Self {
+        Self::DecoderFailed(Arc::new(error))
     }
 }
 

@@ -4,11 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio.workspace = true
-tokio.features = ["fs", "io-util", "process", "time"]
+chrono.workspace = true
+chrono.features = ["serde"]
 
-tokio-stream.workspace = true
-tokio-stream.features = ["io-util"]
+decoder.workspace = true
+decoder.features = ["json"]
 
 reqwest.workspace = true
 reqwest.features = ["json", "socks", "rustls-tls", "gzip"]
@@ -16,8 +16,11 @@ reqwest.features = ["json", "socks", "rustls-tls", "gzip"]
 serde.workspace = true
 serde.features = ["derive"]
 
-chrono.workspace = true
-chrono.features = ["serde"]
+tokio.workspace = true
+tokio.features = ["fs", "io-util", "process", "time"]
+
+tokio-stream.workspace = true
+tokio-stream.features = ["io-util"]
 
 url.workspace = true
 url.features = ["serde"]

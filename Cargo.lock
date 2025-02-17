@@ -945,6 +945,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c297a1c74b71ae29df00c3e22dd9534821d60eb9af5a0192823fa2acea70c2a"
 
 [[package]]
+name = "decoder"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10ad86d01a38184c9668c5dce5f193d8bddd214e4819024da52088bb96de309c"
+dependencies = [
+ "decoder_value",
+ "indexmap",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "decoder_value"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "476500e0cb01fb91ef62e826550d641e20d3e016369f87e4f0538c852f5cf50d"
+dependencies = [
+ "indexmap",
+ "ordered-float",
+ "serde",
+]
+
+[[package]]
 name = "deflate64"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1917,6 +1940,7 @@ dependencies = [
  "iced",
  "iced_fontello",
  "itertools",
+ "log",
  "open",
  "rand 0.9.0",
  "tokio",
@@ -1928,6 +1952,7 @@ name = "icebreaker_core"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "decoder",
  "dirs",
  "futures",
  "log",
@@ -2280,6 +2305,7 @@ checksum = "8c9c992b02b5b4c94ea26e32fe5bccb7aa7d9f390ab5c1221ff895bc7ea8b652"
 dependencies = [
  "equivalent",
  "hashbrown",
+ "serde",
 ]
 
 [[package]]
@@ -3146,6 +3172,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba0b26cec2e24f08ed8bb31519a9333140a6599b867dac464bb150bdb796fd43"
 dependencies = [
  "libredox",
+]
+
+[[package]]
+name = "ordered-float"
+version = "4.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7bb71e1b3fa6ca1c61f383464aaf2bb0e2f8e772a1f01d486832464de363b951"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]

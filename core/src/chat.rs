@@ -1,7 +1,6 @@
 mod schema;
 
 use crate::assistant::{self, Assistant, Reply, Token};
-use crate::chat::schema::Schema;
 use crate::model;
 use crate::plan::{self, Plan};
 use crate::Error;
@@ -43,27 +42,11 @@ impl Chat {
     }
 
     pub async fn fetch(id: Id) -> Result<Self, Error> {
-        let bytes = fs::read(Self::path(&id).await?).await?;
+        let json = fs::read_to_string(Self::path(&id).await?).await?;
 
         let _ = LastOpened::update(id).await;
 
-        task::spawn_blocking(move || {
-            let schema: Schema = serde_json::from_slice(&bytes)?;
-
-            let history = schema
-                .history
-                .into_iter()
-                .map(schema::Message::to_data)
-                .collect();
-
-            Ok(Self {
-                id,
-                file: schema.file,
-                title: schema.title,
-                history,
-            })
-        })
-        .await?
+        task::spawn_blocking(move || schema::decode(&json)).await?
     }
 
     pub async fn fetch_last_opened() -> Result<Self, Error> {
@@ -78,7 +61,14 @@ impl Chat {
         history: Vec<Item>,
     ) -> Result<Self, Error> {
         let id = Id(Uuid::new_v4());
-        let chat = Self::save(id, file, title, history).await?;
+        let chat = Self {
+            id,
+            file,
+            title,
+            history,
+        }
+        .save()
+        .await?;
 
         LastOpened::update(chat.id).await?;
 
@@ -92,48 +82,24 @@ impl Chat {
         Ok(chat)
     }
 
-    pub async fn save(
-        id: Id,
-        file: model::File,
-        title: Option<String>,
-        history: Vec<Item>,
-    ) -> Result<Self, Error> {
-        if let Ok(current) = Self::fetch(id).await {
-            if current.title != title {
+    pub async fn save(self) -> Result<Self, Error> {
+        if let Ok(current) = Self::fetch(self.id).await {
+            if current.title != self.title {
                 let mut list = List::fetch().await?;
 
-                if let Some(entry) = list.entries.iter_mut().find(|entry| entry.id == id) {
-                    entry.title = title.clone();
+                if let Some(entry) = list.entries.iter_mut().find(|entry| entry.id == self.id) {
+                    entry.title = self.title.clone();
                 }
 
                 list.save().await?;
             }
         }
 
-        let (bytes, chat, history) = task::spawn_blocking(move || {
-            let chat = Schema {
-                id,
-                file,
-                title,
-                history: history
-                    .iter()
-                    .cloned()
-                    .map(schema::Message::from_data)
-                    .collect(),
-            };
-
-            (serde_json::to_vec_pretty(&chat), chat, history)
-        })
-        .await?;
+        let (bytes, chat) = task::spawn_blocking(move || (schema::encode(&self), self)).await?;
 
         fs::write(Self::path(&chat.id).await?, bytes?).await?;
 
-        Ok(Self {
-            id: chat.id,
-            file: chat.file,
-            title: chat.title,
-            history,
-        })
+        Ok(chat)
     }
 
     pub async fn delete(id: Id) -> Result<(), Error> {
