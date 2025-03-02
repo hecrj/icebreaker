@@ -946,21 +946,21 @@ checksum = "5c297a1c74b71ae29df00c3e22dd9534821d60eb9af5a0192823fa2acea70c2a"
 
 [[package]]
 name = "decoder"
-version = "0.0.1"
+version = "0.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10ad86d01a38184c9668c5dce5f193d8bddd214e4819024da52088bb96de309c"
+checksum = "ebbd7fc9a66b9c57e684b108780cceeae98fd09788b9764202efb13db55fbc1b"
 dependencies = [
  "decoder_value",
  "indexmap",
  "serde",
- "serde_json",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
 name = "decoder_value"
-version = "0.0.1"
+version = "0.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "476500e0cb01fb91ef62e826550d641e20d3e016369f87e4f0538c852f5cf50d"
+checksum = "9a06251fad8960d2e76005b2d287e6e543e510934ccd9f0d71029bdd28239241"
 dependencies = [
  "indexmap",
  "ordered-float",
@@ -1397,6 +1397,12 @@ checksum = "e13624c2627564efccf4934284bdd98cbaa14e79b0b5a141218e507b3a823456"
 dependencies = [
  "percent-encoding",
 ]
+
+[[package]]
+name = "function"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8360052f2ee38e71313180a9e9007a0db5a6ca9e526196b155c8ad1bd5d5060c"
 
 [[package]]
 name = "futf"
@@ -1954,6 +1960,7 @@ dependencies = [
  "chrono",
  "decoder",
  "dirs",
+ "function",
  "futures",
  "log",
  "reqwest",

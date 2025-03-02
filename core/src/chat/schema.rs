@@ -5,12 +5,12 @@ mod encode;
 mod old;
 
 pub fn decode(json: &str) -> Result<Chat, Error> {
-    match decoder::decode::from_json(decode::chat, json) {
+    match decoder::run(serde_json::from_str, decode::chat, json) {
         Ok(chat) => {
             return Ok(chat);
         }
         Err(error) => {
-            log::error!("{error:?}");
+            log::warn!("{error:?}");
         }
     }
 
@@ -31,5 +31,7 @@ pub fn decode(json: &str) -> Result<Chat, Error> {
 }
 
 pub fn encode(chat: &Chat) -> Result<String, Error> {
-    Ok(decoder::encode::to_json_pretty(encode::chat(chat.clone()))?)
+    let value = encode::chat(chat.clone());
+
+    Ok(serde_json::to_string_pretty(&value)?)
 }

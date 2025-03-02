@@ -4,16 +4,18 @@ use crate::plan;
 use crate::web;
 use crate::{Chat, Plan};
 
-use decoder::encode::{map, optional, sequence, value, with};
+use decoder::encode::{map, optional, sequence, value};
 use decoder::{Map, Value};
+use function::Binary;
 
-pub fn chat(chat: Chat) -> Map {
+pub fn chat(chat: Chat) -> Value {
     map([
         ("id", value(chat.id)),
         ("file", value(chat.file)),
         ("title", value(chat.title)),
         ("history", sequence(item, chat.history)),
     ])
+    .into()
 }
 
 fn item(item: chat::Item) -> Map {
@@ -62,7 +64,7 @@ fn outcome(outcome: plan::Outcome) -> Map {
         plan::Outcome::Search(status) => ("search", status_with(status, value)),
         plan::Outcome::ScrapeText(status) => (
             "scrape_text",
-            status_with(status, with(sequence, web_summary)),
+            status_with(status, sequence.with(web_summary)),
         ),
         plan::Outcome::Answer(status) => ("answer", status_with(status, reply)),
     };

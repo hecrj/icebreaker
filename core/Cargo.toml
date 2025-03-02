@@ -7,9 +7,6 @@ edition = "2021"
 chrono.workspace = true
 chrono.features = ["serde"]
 
-decoder.workspace = true
-decoder.features = ["json"]
-
 reqwest.workspace = true
 reqwest.features = ["json", "socks", "rustls-tls", "gzip"]
 
@@ -28,6 +25,8 @@ url.features = ["serde"]
 uuid.workspace = true
 uuid.features = ["v4", "serde"]
 
+decoder.workspace = true
+function.workspace = true
 futures.workspace = true
 serde_json.workspace = true
 scraper.workspace = true
