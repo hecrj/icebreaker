@@ -946,9 +946,9 @@ checksum = "5c297a1c74b71ae29df00c3e22dd9534821d60eb9af5a0192823fa2acea70c2a"
 
 [[package]]
 name = "decoder"
-version = "0.0.2"
+version = "0.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebbd7fc9a66b9c57e684b108780cceeae98fd09788b9764202efb13db55fbc1b"
+checksum = "90b81d20075c3130f8611942b1b4e1c826a62ee2c218c0035aabc74041ed9c1e"
 dependencies = [
  "decoder_value",
  "indexmap",
@@ -958,9 +958,9 @@ dependencies = [
 
 [[package]]
 name = "decoder_value"
-version = "0.0.2"
+version = "0.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a06251fad8960d2e76005b2d287e6e543e510934ccd9f0d71029bdd28239241"
+checksum = "60a012721b799cc3a8115be79cb8b740b5be76d71f262c8e0089548a50febf97"
 dependencies = [
  "indexmap",
  "ordered-float",

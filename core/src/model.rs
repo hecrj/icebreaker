@@ -159,6 +159,25 @@ pub struct File {
     pub name: String,
 }
 
+impl File {
+    pub fn decode(value: decoder::Value) -> decoder::Result<Self> {
+        use decoder::decode::{map, string};
+
+        let mut file = map(value)?;
+
+        Ok(Self {
+            model: Id(file.required("model", string)?),
+            name: file.required("name", string)?,
+        })
+    }
+
+    pub fn encode(self) -> decoder::Value {
+        use decoder::encode::{map, string};
+
+        map([("model", string(self.model.0)), ("name", string(self.name))]).into()
+    }
+}
+
 impl fmt::Display for File {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.name)

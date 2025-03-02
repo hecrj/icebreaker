@@ -2,17 +2,17 @@ use crate::assistant::{Reasoning, Reply};
 use crate::chat;
 use crate::plan;
 use crate::web;
-use crate::{Chat, Plan};
+use crate::{Chat, Plan, Url};
 
-use decoder::encode::{map, optional, sequence, value};
+use decoder::encode::{duration, map, optional, sequence, string};
 use decoder::{Map, Value};
 use function::Binary;
 
 pub fn chat(chat: Chat) -> Value {
     map([
-        ("id", value(chat.id)),
-        ("file", value(chat.file)),
-        ("title", value(chat.title)),
+        ("id", chat.id.encode()),
+        ("file", chat.file.encode()),
+        ("title", optional(string, chat.title)),
         ("history", sequence(item, chat.history)),
     ])
     .into()
@@ -20,7 +20,7 @@ pub fn chat(chat: Chat) -> Value {
 
 fn item(item: chat::Item) -> Map {
     let (type_, item) = match item {
-        chat::Item::User(message) => ("user", map([("message", value(message))])),
+        chat::Item::User(message) => ("user", map([("message", string(message))])),
         chat::Item::Reply(reply_) => ("reply", reply(reply_)),
         chat::Item::Plan(plan_) => ("plan", plan(plan_)),
     };
@@ -31,14 +31,14 @@ fn item(item: chat::Item) -> Map {
 fn reply(reply: Reply) -> Map {
     map([
         ("reasoning", optional(reasoning, reply.reasoning)),
-        ("content", value(reply.content)),
+        ("content", string(reply.content)),
     ])
 }
 
 fn reasoning(reasoning: Reasoning) -> Map {
     map([
-        ("content", value(reasoning.content)),
-        ("duration", value(reasoning.duration)),
+        ("content", string(reasoning.content)),
+        ("duration", duration(reasoning.duration)),
     ])
 }
 
@@ -52,16 +52,16 @@ fn plan(plan: Plan) -> Map {
 
 fn step(step: plan::Step) -> Map {
     map([
-        ("evidence", value(step.evidence)),
-        ("description", value(step.description)),
-        ("function", value(step.function)),
-        ("inputs", value(step.inputs)),
+        ("evidence", string(step.evidence)),
+        ("description", string(step.description)),
+        ("function", string(step.function)),
+        ("inputs", sequence(string, step.inputs)),
     ])
 }
 
 fn outcome(outcome: plan::Outcome) -> Map {
     let (type_, status) = match outcome {
-        plan::Outcome::Search(status) => ("search", status_with(status, value)),
+        plan::Outcome::Search(status) => ("search", status_with(status, sequence.with(url))),
         plan::Outcome::ScrapeText(status) => (
             "scrape_text",
             status_with(status, sequence.with(web_summary)),
@@ -79,15 +79,19 @@ where
     let (type_, output) = match status {
         plan::Status::Active(output) => ("active", encoder(output).into()),
         plan::Status::Done(output) => ("done", encoder(output).into()),
-        plan::Status::Errored(error) => ("error", value(error)),
+        plan::Status::Errored(error) => ("error", string(error)),
     };
 
-    map([("status", value(type_)), ("output", output)])
+    map([("status", string(type_)), ("output", output)])
 }
 
 fn web_summary(summary: web::Summary) -> Map {
     map([
-        ("url", value(summary.url)),
-        ("content", value(summary.content)),
+        ("url", url(summary.url)),
+        ("content", string(summary.content)),
     ])
+}
+
+fn url(url: Url) -> Value {
+    string(url.to_string())
 }

@@ -1,30 +1,31 @@
 use crate::assistant::{Reasoning, Reply};
 use crate::chat;
+use crate::model;
 use crate::plan;
 use crate::web;
-use crate::{Chat, Plan};
+use crate::{Chat, Plan, Url};
 
-use decoder::decode::{sequence, value};
+use decoder::decode::{duration, map, sequence, string};
 use decoder::{Decoder, Error, Result, Value};
 
 pub fn chat(value: Value) -> Result<Chat> {
-    let mut chat = value.into_map()?;
+    let mut chat = map(value)?;
 
     Ok(Chat {
-        id: chat.required("id")?,
-        file: chat.required("file")?,
-        title: chat.required("title")?,
-        history: chat.required_with("history", sequence(item))?,
+        id: chat.required("id", chat::Id::decode)?,
+        file: chat.required("file", model::File::decode)?,
+        title: chat.optional("title", string)?,
+        history: chat.required("history", sequence(item))?,
     })
 }
 
 fn item(value: Value) -> Result<chat::Item> {
-    let mut item = value.into_map()?;
+    let mut item = map(value)?;
 
-    let type_ = item.required::<String>("type")?;
+    let type_ = item.required("type", string)?;
 
     let item = match type_.as_str() {
-        "user" => chat::Item::User(item.required("message")?),
+        "user" => chat::Item::User(item.required("message", string)?),
         "reply" => chat::Item::Reply(reply(item.into_value())?),
         "plan" => chat::Item::Plan(plan(item.into_value())?),
         _ => {
@@ -36,52 +37,52 @@ fn item(value: Value) -> Result<chat::Item> {
 }
 
 fn reply(value: Value) -> Result<Reply> {
-    let mut reply = value.into_map()?;
+    let mut reply = map(value)?;
 
     Ok(Reply {
-        reasoning: reply.optional_with("reasoning", reasoning)?,
-        content: reply.required("content")?,
+        reasoning: reply.optional("reasoning", reasoning)?,
+        content: reply.required("content", string)?,
         last_token: None,
     })
 }
 
 fn reasoning(value: Value) -> Result<Reasoning> {
-    let mut reasoning = value.into_map()?;
+    let mut reasoning = map(value)?;
 
     Ok(Reasoning {
-        content: reasoning.required("content")?,
-        duration: reasoning.required("duration")?,
+        content: reasoning.required("content", string)?,
+        duration: reasoning.required("duration", duration)?,
     })
 }
 
 fn plan(value: Value) -> Result<Plan> {
-    let mut plan = value.into_map()?;
+    let mut plan = map(value)?;
 
     Ok(Plan {
-        reasoning: plan.optional_with("reasoning", reasoning)?,
-        steps: plan.required_with("steps", sequence(step))?,
-        outcomes: plan.required_with("outcomes", sequence(outcome))?,
+        reasoning: plan.optional("reasoning", reasoning)?,
+        steps: plan.required("steps", sequence(step))?,
+        outcomes: plan.required("outcomes", sequence(outcome))?,
     })
 }
 
 fn step(value: Value) -> Result<plan::Step> {
-    let mut step = value.into_map()?;
+    let mut step = map(value)?;
 
     Ok(plan::Step {
-        evidence: step.required("evidence")?,
-        description: step.required("description")?,
-        function: step.required("function")?,
-        inputs: step.required("inputs")?,
+        evidence: step.required("evidence", string)?,
+        description: step.required("description", string)?,
+        function: step.required("function", string)?,
+        inputs: step.required("inputs", sequence(string))?,
     })
 }
 
 fn outcome(outcome: Value) -> Result<plan::Outcome> {
-    let mut outcome = outcome.into_map()?;
+    let mut outcome = map(outcome)?;
 
-    let type_ = outcome.required::<String>("type")?;
+    let type_ = outcome.required("type", string)?;
 
     let outcome = match type_.as_str() {
-        "search" => plan::Outcome::Search(status(sequence(value), outcome.into_value())?),
+        "search" => plan::Outcome::Search(status(sequence(url), outcome.into_value())?),
         "scrape_text" => {
             plan::Outcome::ScrapeText(status(sequence(web_summary), outcome.into_value())?)
         }
@@ -95,14 +96,14 @@ fn outcome(outcome: Value) -> Result<plan::Outcome> {
 }
 
 fn status<T>(decoder: impl Decoder<Output = T>, value: Value) -> Result<plan::Status<T>> {
-    let mut status = value.into_map()?;
+    let mut status = map(value)?;
 
-    let type_ = status.required::<String>("status")?;
+    let type_ = status.required("status", string)?;
 
     let status = match type_.as_str() {
-        "active" => plan::Status::Active(status.required_with("output", decoder)?),
-        "done" => plan::Status::Done(status.required_with("output", decoder)?),
-        "error" => plan::Status::Errored(status.required("output")?),
+        "active" => plan::Status::Active(status.required("output", decoder)?),
+        "done" => plan::Status::Done(status.required("output", decoder)?),
+        "error" => plan::Status::Errored(status.required("output", string)?),
         _ => {
             return Err(Error::custom(format!("invalid status type: {type_}")));
         }
@@ -112,10 +113,16 @@ fn status<T>(decoder: impl Decoder<Output = T>, value: Value) -> Result<plan::St
 }
 
 fn web_summary(value: Value) -> Result<web::Summary> {
-    let mut summary = value.into_map()?;
+    let mut summary = map(value)?;
 
     Ok(web::Summary {
-        url: summary.required("url")?,
-        content: summary.required("content")?,
+        url: summary.required("url", url)?,
+        content: summary.required("content", string)?,
     })
+}
+
+fn url(value: Value) -> Result<Url> {
+    let url = string(value)?;
+
+    Url::parse(&url).map_err(Error::custom)
 }

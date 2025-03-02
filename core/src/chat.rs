@@ -234,6 +234,24 @@ pub fn title(assistant: &Assistant, items: &[Item]) -> impl Straw<String, String
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Id(Uuid);
 
+impl Id {
+    pub fn decode(value: decoder::Value) -> decoder::Result<Self> {
+        use decoder::decode::string;
+
+        let uuid = string(value)?;
+
+        Uuid::parse_str(&uuid)
+            .map(Self)
+            .map_err(decoder::Error::custom)
+    }
+
+    pub fn encode(self) -> decoder::Value {
+        use decoder::encode::string;
+
+        string(self.0.to_string())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Entry {
     pub id: Id,
