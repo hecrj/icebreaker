@@ -814,8 +814,8 @@ impl Item {
                             let palette = theme.extended_palette();
 
                             container::Style {
-                                background: Some(palette.background.weak.color.into()),
-                                text_color: Some(palette.background.weak.text),
+                                background: Some(palette.background.strong.color.into()),
+                                text_color: Some(palette.background.strong.text),
                                 border: border::rounded(10),
                                 ..container::Style::default()
                             }

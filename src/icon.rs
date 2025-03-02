@@ -66,6 +66,6 @@ pub fn user<'a>() -> Text<'a> {
     icon("\u{1F464}")
 }
 
-fn icon<'a>(codepoint: &'a str) -> Text<'a> {
+fn icon(codepoint: &str) -> Text<'_> {
     text(codepoint).font(Font::with_name("icebreaker-icons"))
 }
