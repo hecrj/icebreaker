@@ -1,7 +1,6 @@
 module = "icon"
 
 [glyphs]
-chat = "entypo-chat"
 clipboard = "fontawesome-docs"
 clock = "fontawesome-clock"
 collapse = "fontawesome-collapse-left"

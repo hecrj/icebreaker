@@ -1,13 +1,14 @@
 use crate::core::{Error, Model};
 use crate::icon;
 
+use iced::border;
 use iced::time::Duration;
 use iced::widget::{
-    self, button, center, column, container, horizontal_space, hover, iced, row, scrollable, text,
+    self, button, center, column, container, horizontal_space, iced, row, scrollable, text,
     text_input, value,
 };
 use iced::window;
-use iced::{Center, Element, Fill, Font, Right, Size, Subscription, Task, Theme};
+use iced::{Center, Element, Fill, Font, Size, Subscription, Task, Theme};
 
 pub struct Search {
     models: Vec<Model>,
@@ -270,18 +271,35 @@ fn model_card(model: &Model) -> Element<Message> {
     ]
     .spacing(10);
 
-    let chat = container(
-        button(row![icon::chat(), "Run"].spacing(10)).on_press(Message::RunModel(model.clone())),
-    )
-    .width(Fill)
-    .padding(10)
-    .align_x(Right)
-    .center_y(Fill);
-
-    let card = container(column![title, metadata].spacing(10))
+    button(column![title, metadata].spacing(10))
         .width(Fill)
         .padding(10)
-        .style(container::rounded_box);
+        .style(|theme, status| {
+            let palette = theme.extended_palette();
 
-    hover(card, chat)
+            let base = button::Style {
+                background: Some(palette.background.weakest.color.into()),
+                text_color: palette.background.weakest.text,
+                border: border::rounded(2)
+                    .color(palette.background.weak.color)
+                    .width(1),
+                ..button::Style::default()
+            };
+
+            match status {
+                button::Status::Active | button::Status::Disabled => base,
+                button::Status::Hovered => button::Style {
+                    background: Some(palette.background.weak.color.into()),
+                    text_color: palette.background.weak.text,
+                    border: base.border.color(palette.primary.base.color),
+                    ..base
+                },
+                button::Status::Pressed => button::Style {
+                    border: base.border.color(palette.primary.strong.color),
+                    ..base
+                },
+            }
+        })
+        .on_press_with(|| Message::RunModel(model.clone()))
+        .into()
 }
