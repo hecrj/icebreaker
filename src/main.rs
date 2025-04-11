@@ -86,7 +86,7 @@ impl Icebreaker {
                         task.map(Message::Conversation)
                     }
                     Err(error) => {
-                        log::error!("{error}");
+                        log::warn!("{error}");
 
                         self.search()
                     }
