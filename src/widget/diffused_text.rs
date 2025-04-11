@@ -131,8 +131,8 @@ where
     }
 
     pub fn fast(mut self) -> Self {
-        self.duration = self.duration / 2;
-        self.tick_rate = self.tick_rate / 2;
+        self.duration /= 2;
+        self.tick_rate /= 2;
         self
     }
 }
@@ -155,8 +155,8 @@ enum Animation {
     Done,
 }
 
-impl<'a, Message, Theme, Renderer> Widget<Message, Theme, Renderer>
-    for DiffusedText<'a, Theme, Renderer>
+impl<Message, Theme, Renderer> Widget<Message, Theme, Renderer>
+    for DiffusedText<'_, Theme, Renderer>
 where
     Theme: text::Catalog,
     Renderer: advanced::text::Renderer,
@@ -264,56 +264,53 @@ where
             return;
         }
 
-        match event {
-            Event::Window(window::Event::RedrawRequested(now)) => {
-                let state = tree.state.downcast_mut::<State<Renderer::Paragraph>>();
+        if let Event::Window(window::Event::RedrawRequested(now)) = event {
+            let state = tree.state.downcast_mut::<State<Renderer::Paragraph>>();
 
-                match &mut state.animation {
-                    Animation::Ticking {
-                        fragment,
-                        next_redraw,
-                        ticks,
-                    } => {
-                        if *next_redraw <= *now {
-                            *ticks += 1;
+            match &mut state.animation {
+                Animation::Ticking {
+                    fragment,
+                    next_redraw,
+                    ticks,
+                } => {
+                    if *next_redraw <= *now {
+                        *ticks += 1;
 
-                            let mut rng = rand::rng();
-                            let progress = (self.fragment.len() as f32
-                                / self.duration.as_millis() as f32
-                                * (*ticks * self.tick_rate) as f32)
-                                as usize;
+                        let mut rng = rand::rng();
+                        let progress = (self.fragment.len() as f32
+                            / self.duration.as_millis() as f32
+                            * (*ticks * self.tick_rate) as f32)
+                            as usize;
 
-                            if progress >= self.fragment.len() {
-                                state.animation = Animation::Done;
-                                shell.invalidate_layout();
-
-                                return;
-                            }
-
-                            *fragment = self
-                                .fragment
-                                .chars()
-                                .take(progress as usize)
-                                .chain(self.fragment.chars().skip(progress as usize).map(|c| {
-                                    if c.is_whitespace() || c == '-' {
-                                        c
-                                    } else {
-                                        rng.random_range('a'..'z')
-                                    }
-                                }))
-                                .collect::<String>();
-
-                            *next_redraw = *now + Duration::from_millis(self.tick_rate);
-
+                        if progress >= self.fragment.len() {
+                            state.animation = Animation::Done;
                             shell.invalidate_layout();
+
+                            return;
                         }
 
-                        shell.request_redraw_at(*next_redraw);
+                        *fragment = self
+                            .fragment
+                            .chars()
+                            .take(progress)
+                            .chain(self.fragment.chars().skip(progress).map(|c| {
+                                if c.is_whitespace() || c == '-' {
+                                    c
+                                } else {
+                                    rng.random_range('a'..='z')
+                                }
+                            }))
+                            .collect::<String>();
+
+                        *next_redraw = *now + Duration::from_millis(self.tick_rate);
+
+                        shell.invalidate_layout();
                     }
-                    Animation::Done => {}
+
+                    shell.request_redraw_at(*next_redraw);
                 }
+                Animation::Done => {}
             }
-            _ => {}
         }
     }
 }

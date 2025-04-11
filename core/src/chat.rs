@@ -195,7 +195,7 @@ fn reply<'a>(
 
 pub fn title(assistant: &Assistant, items: &[Item]) -> impl Straw<String, String, Error> {
     let assistant = assistant.clone();
-    let history = history(&items);
+    let history = history(items);
 
     sipper(move |mut sender| async move {
         let request = [assistant::Message::User(

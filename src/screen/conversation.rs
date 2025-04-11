@@ -304,7 +304,7 @@ impl Conversation {
 
                     if self.title.is_none() || messages.len() == 2 || messages.len() == 6 {
                         Action::Run(Task::sip(
-                            chat::title(&assistant, &messages),
+                            chat::title(assistant, &messages),
                             Message::TitleChanging,
                             Message::TitleChanged,
                         ))
@@ -385,7 +385,7 @@ impl Conversation {
                 Action::Run(widget::focus_next())
             }
             Message::Delete => {
-                if let Some(id) = self.id.clone() {
+                if let Some(id) = self.id {
                     Action::Run(Task::future(Chat::delete(id)).and_then(|_| {
                         Task::batch([
                             Task::perform(Chat::fetch_last_opened(), Message::LastChatFetched),
@@ -436,7 +436,7 @@ impl Conversation {
         if let Some(id) = &self.id {
             Action::Run(Task::perform(
                 Chat {
-                    id: id.clone(),
+                    id: *id,
                     file: assistant.file().clone(),
                     title: self.title.clone(),
                     history: items,
@@ -706,7 +706,7 @@ impl Conversation {
                                 .into()
                         } else {
                             button(card)
-                                .on_press_with(move || Message::Open(chat.id.clone()))
+                                .on_press_with(move || Message::Open(chat.id))
                                 .padding(5)
                                 .width(Fill)
                                 .style(|theme: &Theme, status: button::Status| match status {
@@ -789,7 +789,7 @@ impl History {
         self.items.truncate(amount);
     }
 
-    pub fn to_data<'a>(&'a self) -> Vec<chat::Item> {
+    pub fn to_data(&self) -> Vec<chat::Item> {
         // TODO: Cache
         self.items.iter().map(Item::to_data).collect()
     }

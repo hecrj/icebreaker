@@ -136,12 +136,7 @@ fn design<'a>(
             .run(progress)
             .await?;
 
-        let steps = reply
-            .content
-            .split("```")
-            .skip(1)
-            .next()
-            .unwrap_or(&reply.content);
+        let steps = reply.content.split("```").nth(1).unwrap_or(&reply.content);
 
         let plan = steps.trim_start_matches("json").trim();
 

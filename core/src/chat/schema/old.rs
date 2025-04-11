@@ -31,11 +31,11 @@ pub enum Message {
 }
 
 impl Message {
-    pub fn to_data(self) -> Item {
+    pub fn into_data(self) -> Item {
         match self {
             Message::User(content) => Item::User(content),
-            Message::Reply(reply) => Item::Reply(reply.to_data()),
-            Message::Plan(plan) => Item::Plan(plan.to_data()),
+            Message::Reply(reply) => Item::Reply(reply.into_data()),
+            Message::Plan(plan) => Item::Plan(plan.into_data()),
         }
     }
 }
@@ -49,7 +49,7 @@ pub struct Reply {
 }
 
 impl Reply {
-    fn to_data(self) -> assistant::Reply {
+    fn into_data(self) -> assistant::Reply {
         assistant::Reply {
             reasoning: if self.reasoning.is_empty() {
                 None
@@ -84,7 +84,7 @@ struct Reasoning {
 }
 
 impl Reasoning {
-    fn to_data(self) -> assistant::Reasoning {
+    fn into_data(self) -> assistant::Reasoning {
         assistant::Reasoning {
             content: self.content,
             duration: self.duration,
@@ -103,11 +103,11 @@ pub struct Plan {
 }
 
 impl Plan {
-    fn to_data(self) -> crate::Plan {
+    fn into_data(self) -> crate::Plan {
         crate::Plan {
-            reasoning: self.reasoning.map(Reasoning::to_data),
-            steps: self.steps.into_iter().map(Step::to_data).collect(),
-            outcomes: self.outcomes.into_iter().map(Outcome::to_data).collect(),
+            reasoning: self.reasoning.map(Reasoning::into_data),
+            steps: self.steps.into_iter().map(Step::into_data).collect(),
+            outcomes: self.outcomes.into_iter().map(Outcome::into_data).collect(),
         }
     }
 }
@@ -121,7 +121,7 @@ pub struct Step {
 }
 
 impl Step {
-    fn to_data(self) -> plan::Step {
+    fn into_data(self) -> plan::Step {
         plan::Step {
             evidence: self.evidence,
             description: self.description,
@@ -139,13 +139,13 @@ pub enum Outcome {
 }
 
 impl Outcome {
-    fn to_data(self) -> plan::Outcome {
+    fn into_data(self) -> plan::Outcome {
         match self {
-            Self::Search(status) => plan::Outcome::Search(Status::to_data(status)),
-            Self::ScrapeText(status) => plan::Outcome::ScrapeText(Status::to_data(status.map(
+            Self::Search(status) => plan::Outcome::Search(Status::into_data(status)),
+            Self::ScrapeText(status) => plan::Outcome::ScrapeText(Status::into_data(status.map(
                 |summaries| match summaries {
                     WebSummaries::Known(summaries) => {
-                        summaries.into_iter().map(WebSummary::to_data).collect()
+                        summaries.into_iter().map(WebSummary::into_data).collect()
                     }
                     WebSummaries::Uknown(lines) => vec![web::Summary {
                         url: Url::parse("https://unknown.com/").expect("Parse URL"),
@@ -154,7 +154,7 @@ impl Outcome {
                 },
             ))),
             Self::Answer(status) => {
-                plan::Outcome::Answer(Status::to_data(status.map(Reply::to_data)))
+                plan::Outcome::Answer(Status::into_data(status.map(Reply::into_data)))
             }
         }
     }
@@ -168,7 +168,7 @@ pub enum Status<T> {
 }
 
 impl<T> Status<T> {
-    fn to_data(self) -> plan::Status<T> {
+    fn into_data(self) -> plan::Status<T> {
         match self {
             Status::Active(value) => plan::Status::Active(value),
             Status::Done(value) => plan::Status::Done(value),
@@ -199,7 +199,7 @@ pub struct WebSummary {
 }
 
 impl WebSummary {
-    fn to_data(self) -> web::Summary {
+    fn into_data(self) -> web::Summary {
         web::Summary {
             url: self.url,
             content: self.content,

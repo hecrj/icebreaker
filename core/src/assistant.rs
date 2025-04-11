@@ -314,7 +314,7 @@ impl Assistant {
                         }
                     }
 
-                    return false;
+                    false
                 }
                 .boxed()
             };

@@ -204,7 +204,7 @@ impl Plan {
             column![steps, current].spacing(10).into()
         };
 
-        steps.into()
+        steps
     }
 }
 
@@ -234,7 +234,7 @@ impl Outcome {
 
     pub fn view(&self, index: usize, theme: &Theme) -> Element<Message> {
         match self {
-            Outcome::Search(status) => show_status(status, links),
+            Outcome::Search(status) => show_status(status, |search| links(search)),
             Outcome::ScrapeText(status) => {
                 show_status(status, |summaries| summary_grid(summaries, self.stage()))
             }
@@ -289,7 +289,7 @@ fn error(error: &str) -> Element<Message> {
     text(error).style(text::danger).font(Font::MONOSPACE).into()
 }
 
-fn links(links: &Vec<Url>) -> Element<Message> {
+fn links(links: &[Url]) -> Element<Message> {
     if links.is_empty() {
         return horizontal_space().into();
     }
@@ -321,7 +321,7 @@ fn links(links: &Vec<Url>) -> Element<Message> {
     .into()
 }
 
-fn summary_grid(summaries: &Vec<web::Summary>, stage: Stage) -> Element<Message> {
+fn summary_grid(summaries: &[web::Summary], stage: Stage) -> Element<Message> {
     fn summary(summary: &web::Summary, stage: Stage) -> Element<Message> {
         let title = {
             let domain = text(

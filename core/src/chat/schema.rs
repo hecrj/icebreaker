@@ -23,7 +23,7 @@ pub fn decode(json: &str) -> Result<Chat, Error> {
         history: schema
             .history
             .into_iter()
-            .map(old::Message::to_data)
+            .map(old::Message::into_data)
             .collect(),
     };
 

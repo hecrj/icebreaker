@@ -82,7 +82,7 @@ impl Reply {
                 .spacing(20)
                 .into()
         } else {
-            message.into()
+            message
         }
     }
 }
