@@ -9,6 +9,7 @@ repository = "https://github.com/hecrj/icebreaker"
 
 [dependencies]
 icebreaker_core.workspace = true
+iced_palace.workspace = true
 itertools.workspace = true
 log.workspace = true
 open.workspace = true
@@ -17,7 +18,7 @@ tokio.workspace = true
 tracing-subscriber.workspace = true
 
 iced.workspace = true
-iced.features = ["tokio", "svg", "markdown", "highlighter", "system", "web-colors", "advanced", "debug"]
+iced.features = ["tokio", "sipper", "svg", "markdown", "highlighter", "system", "debug"]
 
 [build-dependencies]
 iced_fontello = "0.13"
@@ -28,14 +29,13 @@ members = ["core"]
 [workspace.dependencies]
 icebreaker_core.path = "./core"
 
-iced.git = "https://github.com/iced-rs/iced.git"
-iced.rev = "beddf49c76f3b43e7b33452831e1293cad28fd89"
-
 chrono = "0.4"
 decoder = "0.0.3"
 dirs = "6.0"
 function = "0.2"
 futures = "0.3"
+iced = "0.14.0-dev"
+iced_palace = "0.14.0-dev"
 itertools = "0.13"
 log = "0.4"
 open = "5.2"
@@ -51,3 +51,13 @@ tokio-stream = "0.1"
 tracing-subscriber = "0.3"
 url = "2.5"
 uuid = "1.10"
+
+[patch.crates-io]
+iced.git = "https://github.com/iced-rs/iced.git"
+iced.rev = "d1e936fb2551d75ff9d54dc63e38d6e6eaeb8131"
+
+iced_core.git = "https://github.com/iced-rs/iced.git"
+iced_core.rev = "d1e936fb2551d75ff9d54dc63e38d6e6eaeb8131"
+
+iced_palace.git = "https://github.com/hecrj/iced_palace"
+iced_palace.rev = "7d9364bd0530927d5cfc0eb70866075e51f54f58"
