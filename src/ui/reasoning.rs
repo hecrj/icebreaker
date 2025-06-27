@@ -57,7 +57,7 @@ impl Reasoning {
         .on_press(on_toggle(!self.show))
         .style(button::secondary);
 
-        let reasoning: Element<_> = if self.show {
+        let reasoning: Element<'_, _> = if self.show {
             let thoughts = column(self.thoughts.iter().map(|thought| {
                 text(thought)
                     .size(12)

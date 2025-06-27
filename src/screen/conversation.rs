@@ -452,9 +452,9 @@ impl Conversation {
         }
     }
 
-    pub fn view(&self, theme: &Theme) -> Element<Message> {
-        let header: Element<_> = {
-            let title: Element<_> = match &self.title {
+    pub fn view(&self, theme: &Theme) -> Element<'_, Message> {
+        let header: Element<'_, _> = {
+            let title: Element<'_, _> = match &self.title {
                 Some(title) => column![
                     text(title).font(Font::MONOSPACE).size(20),
                     text(self.model_name())
@@ -489,7 +489,7 @@ impl Conversation {
                 tip::Position::Right,
             );
 
-            let delete: Element<_> = if self.id.is_some() {
+            let delete: Element<'_, _> = if self.id.is_some() {
                 tip(
                     button(icon::trash().style(text::danger))
                         .padding(0)
@@ -583,7 +583,7 @@ impl Conversation {
             }
         };
 
-        let messages: Element<_> = if self.history.is_empty() {
+        let messages: Element<'_, _> = if self.history.is_empty() {
             center(
                 match &self.state {
                     State::Running { .. } => column![
@@ -676,7 +676,7 @@ impl Conversation {
                     column![vertical_space(), new, search]
                 } else {
                     let chats = column(self.chats.iter().map(|chat| {
-                        let card: Element<_> = match &chat.title {
+                        let card: Element<'_, _> = match &chat.title {
                             Some(title) => {
                                 let title = text(title).font(Font::MONOSPACE);
                                 let subtitle =

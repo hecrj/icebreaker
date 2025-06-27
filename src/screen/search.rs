@@ -123,13 +123,13 @@ impl Search {
         }
     }
 
-    pub fn view(&self) -> Element<Message> {
+    pub fn view(&self) -> Element<'_, Message> {
         let search = text_input("Search language models...", &self.search)
             .size(20)
             .padding(10)
             .on_input(Message::SearchChanged);
 
-        let models: Element<_> =
+        let models: Element<'_, _> =
             {
                 let search_terms: Vec<_> = self
                     .search
@@ -224,7 +224,7 @@ impl Search {
     }
 }
 
-fn model_card(model: &Model) -> Element<Message> {
+fn model_card(model: &Model) -> Element<'_, Message> {
     use iced::widget::Text;
 
     fn stat<'a>(

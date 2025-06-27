@@ -105,7 +105,7 @@ impl Plan {
 
             progress.send(Event::Designed(plan.clone())).await;
 
-            execute(assistant, history, query, &plan)
+            let _ = execute(assistant, history, query, &plan)
                 .run(progress)
                 .await?;
 
@@ -259,7 +259,7 @@ fn execute<'a>(
                 }
             };
 
-            self.outputs.insert(name.to_owned(), output);
+            let _ = self.outputs.insert(name.to_owned(), output);
             self.outcomes.push(outcome.clone());
 
             self.sender

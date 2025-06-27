@@ -154,7 +154,7 @@ impl Icebreaker {
         }
     }
 
-    fn view(&self) -> Element<Message> {
+    fn view(&self) -> Element<'_, Message> {
         match &self.screen {
             Screen::Loading => screen::loading(),
             Screen::Search(search) => search.view().map(Message::Search),

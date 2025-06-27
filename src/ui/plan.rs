@@ -103,8 +103,8 @@ impl Plan {
         }
     }
 
-    pub fn view(&self, theme: &Theme) -> Element<Message> {
-        let steps: Element<_> = if self.steps.is_empty() {
+    pub fn view(&self, theme: &Theme) -> Element<'_, Message> {
+        let steps: Element<'_, _> = if self.steps.is_empty() {
             diffused_text("Designing a plan...")
                 .size(20)
                 .font(Font::MONOSPACE)
@@ -155,7 +155,7 @@ impl Plan {
                                 }
                             });
 
-                        let number: Element<_> = if i == active_step {
+                        let number: Element<'_, _> = if i == active_step {
                             number.into()
                         } else {
                             button(number)
@@ -175,7 +175,7 @@ impl Plan {
                 .align_y(Center),
             );
 
-            let current: Element<_> = self
+            let current: Element<'_, _> = self
                 .steps
                 .iter()
                 .zip(self.outcomes.iter())
@@ -232,7 +232,7 @@ impl Outcome {
         }
     }
 
-    pub fn view(&self, index: usize, theme: &Theme) -> Element<Message> {
+    pub fn view(&self, index: usize, theme: &Theme) -> Element<'_, Message> {
         match self {
             Outcome::Search(status) => show_status(status, |search| links(search)),
             Outcome::ScrapeText(status) => {
@@ -285,11 +285,11 @@ fn show_status<'a, T>(
     status.result().map(show).unwrap_or_else(error)
 }
 
-fn error(error: &str) -> Element<Message> {
+fn error(error: &str) -> Element<'_, Message> {
     text(error).style(text::danger).font(Font::MONOSPACE).into()
 }
 
-fn links(links: &[Url]) -> Element<Message> {
+fn links(links: &[Url]) -> Element<'_, Message> {
     if links.is_empty() {
         return horizontal_space().into();
     }
@@ -321,8 +321,8 @@ fn links(links: &[Url]) -> Element<Message> {
     .into()
 }
 
-fn summary_grid(summaries: &[web::Summary], stage: Stage) -> Element<Message> {
-    fn summary(summary: &web::Summary, stage: Stage) -> Element<Message> {
+fn summary_grid(summaries: &[web::Summary], stage: Stage) -> Element<'_, Message> {
+    fn summary(summary: &web::Summary, stage: Stage) -> Element<'_, Message> {
         let title = {
             let domain = text(
                 summary

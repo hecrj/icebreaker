@@ -57,6 +57,11 @@ tracing-subscriber = "0.3"
 url = "2.5"
 uuid = "1.10"
 
+[workspace.lints.rust]
+rust_2018_idioms = { level = "deny", priority = -1 }
+unsafe_code = "deny"
+unused_results = "deny"
+
 [workspace.lints.clippy]
 large-enum-variant = "allow"
 

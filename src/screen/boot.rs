@@ -107,7 +107,7 @@ impl Boot {
         }
     }
 
-    pub fn view(&self, theme: Theme) -> Element<Message> {
+    pub fn view(&self, theme: Theme) -> Element<'_, Message> {
         let title = text(self.model.name()).size(20).font(Font::MONOSPACE);
 
         let boot = {
@@ -150,7 +150,7 @@ impl Boot {
             .spacing(10)
         };
 
-        let readme: Element<_> = if self.readme.is_empty() {
+        let readme: Element<'_, _> = if self.readme.is_empty() {
             center(
                 rich_text!["Loading ", span("README").font(Font::MONOSPACE), "..."]
                     .on_link_click(never),
@@ -174,6 +174,6 @@ impl Boot {
     }
 }
 
-fn action(text: &str) -> button::Button<Message> {
+fn action(text: &str) -> button::Button<'_, Message> {
     button(container(text).center_x(Fill)).width(100)
 }

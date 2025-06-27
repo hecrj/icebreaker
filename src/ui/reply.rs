@@ -71,7 +71,7 @@ impl Reply {
         theme: &Theme,
         on_reasoning_toggle: impl Fn(bool) -> Message,
         on_markdown_interaction: impl Fn(markdown::Interaction) -> Message + 'static,
-    ) -> Element<Message>
+    ) -> Element<'_, Message>
     where
         Message: Clone + 'static,
     {
