@@ -102,7 +102,7 @@ async fn scrape(url: Url) -> Result<String, Error> {
         .await?;
 
     log::info!("-- HTML retrieved ({} chars)", html.len());
-    log::trace!("{}", html);
+    log::trace!("{html}");
 
     let html = scraper::Html::parse_document(&html);
 

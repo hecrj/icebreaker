@@ -25,6 +25,9 @@ iced_palace.features = ["rand"]
 [build-dependencies]
 iced_fontello = "0.13"
 
+[lints]
+workspace = true
+
 [workspace]
 members = ["core"]
 
@@ -53,6 +56,9 @@ tokio-stream = "0.1"
 tracing-subscriber = "0.3"
 url = "2.5"
 uuid = "1.10"
+
+[workspace.lints.clippy]
+large-enum-variant = "allow"
 
 [patch.crates-io]
 iced.git = "https://github.com/iced-rs/iced.git"

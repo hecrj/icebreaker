@@ -34,3 +34,6 @@ dirs.workspace = true
 thiserror.workspace = true
 log.workspace = true
 sipper.workspace = true
+
+[lints]
+workspace = true
