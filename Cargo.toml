@@ -9,7 +9,6 @@ repository = "https://github.com/hecrj/icebreaker"
 
 [dependencies]
 icebreaker_core.workspace = true
-iced_palace.workspace = true
 itertools.workspace = true
 log.workspace = true
 open.workspace = true
@@ -18,7 +17,10 @@ tokio.workspace = true
 tracing-subscriber.workspace = true
 
 iced.workspace = true
-iced.features = ["tokio", "sipper", "svg", "markdown", "highlighter", "system", "debug"]
+iced.features = ["tokio", "sipper", "svg", "markdown", "highlighter", "system", "crisp", "debug"]
+
+iced_palace.workspace = true
+iced_palace.features = ["rand"]
 
 [build-dependencies]
 iced_fontello = "0.13"
@@ -54,10 +56,10 @@ uuid = "1.10"
 
 [patch.crates-io]
 iced.git = "https://github.com/iced-rs/iced.git"
-iced.rev = "d1e936fb2551d75ff9d54dc63e38d6e6eaeb8131"
+iced.rev = "9ef2c468831ae3dd86ce7afc0f675070ca68dd4a"
 
 iced_core.git = "https://github.com/iced-rs/iced.git"
-iced_core.rev = "d1e936fb2551d75ff9d54dc63e38d6e6eaeb8131"
+iced_core.rev = "9ef2c468831ae3dd86ce7afc0f675070ca68dd4a"
 
 iced_palace.git = "https://github.com/hecrj/iced_palace"
-iced_palace.rev = "7d9364bd0530927d5cfc0eb70866075e51f54f58"
+iced_palace.rev = "14506bd5b97afe360603eaeb0da2611eab35f14c"
