@@ -67,10 +67,10 @@ large-enum-variant = "allow"
 
 [patch.crates-io]
 iced.git = "https://github.com/iced-rs/iced.git"
-iced.rev = "9ef2c468831ae3dd86ce7afc0f675070ca68dd4a"
+iced.rev = "d4f8e1902322b239be9580b3afb936c99ec49b79"
 
 iced_core.git = "https://github.com/iced-rs/iced.git"
-iced_core.rev = "9ef2c468831ae3dd86ce7afc0f675070ca68dd4a"
+iced_core.rev = "d4f8e1902322b239be9580b3afb936c99ec49b79"
 
 iced_palace.git = "https://github.com/hecrj/iced_palace"
 iced_palace.rev = "14506bd5b97afe360603eaeb0da2611eab35f14c"

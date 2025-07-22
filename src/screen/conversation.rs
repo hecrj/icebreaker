@@ -562,7 +562,7 @@ impl Conversation {
                                 logs.iter()
                                     .map(|log| text(log).size(12).font(Font::MONOSPACE).into()),
                             )
-                            .push_maybe(error)
+                            .push(error)
                             .spacing(5)
                             .padding(padding::right(20)),
                         )
