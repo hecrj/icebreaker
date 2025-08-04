@@ -282,6 +282,9 @@ impl Icebreaker {
 
         self.screen = Screen::Search(search);
 
-        task.map(Message::Search)
+        Task::batch([
+            Task::perform(model::Library::scan(), Message::Scanned),
+            task.map(Message::Search),
+        ])
     }
 }
