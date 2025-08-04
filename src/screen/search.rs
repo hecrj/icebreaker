@@ -303,6 +303,21 @@ impl Search {
 
     pub fn sidebar<'a>(&'a self, library: &'a model::Library) -> Element<'a, Message> {
         let header = sidebar_section("Models", icon::search(), Message::Back);
+
+        if library.files().is_empty() {
+            return column![
+                header,
+                center(
+                    text("No models have been downloaded yet.\n\nFind some to start chatting →")
+                        .width(Fill)
+                        .center()
+                        .shaping(text::Shaping::Advanced)
+                )
+            ]
+            .spacing(10)
+            .into();
+        }
+
         let library = column(library.files().iter().map(|file| {
             let title = ellipsized_text(file.model.name())
                 .font(Font::MONOSPACE)
