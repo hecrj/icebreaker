@@ -6,19 +6,22 @@ use crate::icon;
 use crate::ui::markdown;
 use crate::ui::plan;
 use crate::ui::{Markdown, Plan, Reply};
-use crate::widget::{copy, regenerate, tip, toggle};
+use crate::widget::{copy, regenerate, sidebar_section, tip, toggle};
 
 use iced::border;
 use iced::clipboard;
+use iced::gradient;
 use iced::padding;
 use iced::task::{self, Task};
 use iced::time::{self, Duration, Instant};
 use iced::widget::{
-    self, bottom, bottom_center, button, center, center_x, center_y, column, container,
-    horizontal_space, hover, pop, progress_bar, right, right_center, row, scrollable, stack, text,
-    text_editor, tooltip, value, vertical_space,
+    self, bottom, button, center, center_x, center_y, column, container, horizontal_space, hover,
+    opaque, progress_bar, right, right_center, row, scrollable, sensor, stack, text, text_editor,
+    tooltip, value, vertical_space,
 };
-use iced::{Center, Element, Fill, Font, Function, Shrink, Size, Subscription, Theme};
+use iced::Degrees;
+use iced::{Center, Color, Element, Fill, Font, Function, Shrink, Size, Subscription, Theme};
+use iced_palace::widget::ellipsized_text;
 
 pub struct Conversation {
     backend: Backend,
@@ -28,10 +31,12 @@ pub struct Conversation {
     title: Option<String>,
     history: History,
     input: text_editor::Content,
+    header_height: f32,
+    chat_width: f32,
     input_height: f32,
+    total_width: f32,
     strategy: Strategy,
     error: Option<Error>,
-    sidebar_open: bool,
 }
 
 enum State {
@@ -56,6 +61,10 @@ pub enum Message {
     Booted(Result<Assistant, Error>),
     Tick(Instant),
     InputChanged(text_editor::Action),
+    Resized(Size),
+    HeaderShown(Size),
+    HeaderResized(Size),
+    ChatResized(Size),
     InputResized(Size),
     ToggleSearch,
     Submit,
@@ -73,8 +82,6 @@ pub enum Message {
     LastChatFetched(Result<Chat, Error>),
     Delete,
     New,
-    Search,
-    ToggleSidebar,
     Plan(usize, plan::Message),
     Markdown(markdown::Interaction),
 }
@@ -82,7 +89,6 @@ pub enum Message {
 pub enum Action {
     None,
     Run(Task<Message>),
-    Back,
 }
 
 impl Conversation {
@@ -109,18 +115,15 @@ impl Conversation {
                 title: None,
                 history: History::new(),
                 input: text_editor::Content::new(),
-                input_height: 50.0,
+                header_height: 0.0,
+                chat_width: 0.0,
+                input_height: 0.0,
+                total_width: 0.0,
                 strategy: Strategy::default(),
                 error: None,
                 chats: Vec::new(),
-                sidebar_open: true,
             },
-            Task::batch([
-                boot,
-                Task::perform(Chat::list(), Message::ChatsListed),
-                widget::focus_next(),
-                snap_chat_to_end(),
-            ]),
+            Task::batch([boot, Task::perform(Chat::list(), Message::ChatsListed)]),
         )
     }
 
@@ -198,6 +201,26 @@ impl Conversation {
             Message::InputChanged(action) => {
                 self.input.perform(action);
                 self.error = None;
+
+                Action::None
+            }
+            Message::Resized(bounds) => {
+                self.total_width = bounds.width;
+
+                Action::None
+            }
+            Message::HeaderShown(bounds) => {
+                self.header_height = bounds.height;
+
+                Action::Run(Task::batch([widget::focus_next(), snap_chat_to_end()]))
+            }
+            Message::HeaderResized(bounds) => {
+                self.header_height = bounds.height;
+
+                Action::None
+            }
+            Message::ChatResized(bounds) => {
+                self.chat_width = bounds.width;
 
                 Action::None
             }
@@ -348,7 +371,7 @@ impl Conversation {
                         self.history = History::restore(chat.history);
                         self.input = text_editor::Content::new();
 
-                        Action::Run(Task::batch([widget::focus_next(), snap_chat_to_end()]))
+                        Action::None
                     }
                     State::Running { assistant, sending } if assistant.file() == &chat.file => {
                         self.id = Some(chat.id);
@@ -359,7 +382,7 @@ impl Conversation {
 
                         *sending = None;
 
-                        Action::Run(Task::batch([widget::focus_next(), snap_chat_to_end()]))
+                        Action::None
                     }
                     _ => {
                         let (mut conversation, task) = Self::open(chat, self.backend);
@@ -395,12 +418,6 @@ impl Conversation {
                 } else {
                     Action::None
                 }
-            }
-            Message::Search => Action::Back,
-            Message::ToggleSidebar => {
-                self.sidebar_open = !self.sidebar_open;
-
-                Action::None
             }
             Message::Plan(index, message) => {
                 let Some(Item::Plan(plan)) = self.history.items.get_mut(index) else {
@@ -456,7 +473,7 @@ impl Conversation {
         let header: Element<'_, _> = {
             let title: Element<'_, _> = match &self.title {
                 Some(title) => column![
-                    text(title).font(Font::MONOSPACE).size(20),
+                    text(title).size(20).width(Fill).align_x(Center),
                     text(self.model_name())
                         .font(Font::MONOSPACE)
                         .size(14)
@@ -472,23 +489,6 @@ impl Conversation {
                     .into(),
             };
 
-            let toggle_sidebar = tip(
-                button(if self.sidebar_open {
-                    icon::collapse()
-                } else {
-                    icon::expand()
-                })
-                .padding(0)
-                .on_press(Message::ToggleSidebar)
-                .style(button::text),
-                if self.sidebar_open {
-                    "Close sidebar"
-                } else {
-                    "Open sidebar"
-                },
-                tip::Position::Right,
-            );
-
             let delete: Element<'_, _> = if self.id.is_some() {
                 tip(
                     button(icon::trash().style(text::danger))
@@ -502,11 +502,7 @@ impl Conversation {
                 horizontal_space().into()
             };
 
-            let bar = stack![
-                center_x(title).padding([0, 40]),
-                row![toggle_sidebar, horizontal_space(), delete],
-            ]
-            .into();
+            let bar = hover(center_x(title).padding([0, 40]), right_center(delete));
 
             match &self.state {
                 State::Booting {
@@ -588,11 +584,15 @@ impl Conversation {
                 match &self.state {
                     State::Running { .. } => column![
                         text("Your assistant is ready."),
-                        text("Break the ice! ↓").style(text::primary),
+                        text("Break the ice! ↓")
+                            .style(text::primary)
+                            .shaping(text::Shaping::Advanced)
                     ],
                     State::Booting { .. } => column![
                         text("Your assistant is launching..."),
-                        text("You can begin typing while you wait! ↓").style(text::success),
+                        text("You can begin typing while you wait! ↓")
+                            .style(text::success)
+                            .shaping(text::Shaping::Advanced),
                     ],
                 }
                 .spacing(10)
@@ -600,7 +600,10 @@ impl Conversation {
             )
             .into()
         } else {
-            scrollable(
+            scrollable(column![
+                sensor(horizontal_space())
+                    .key(self.id)
+                    .on_resize(Message::ChatResized),
                 center_x(
                     column(
                         self.history
@@ -608,11 +611,11 @@ impl Conversation {
                             .enumerate()
                             .map(|(i, item)| item.view(i, theme)),
                     )
-                    .padding(20)
+                    .padding(padding::all(20).top(0))
                     .max_width(600),
                 )
-                .padding(padding::bottom(self.input_height)),
-            )
+                .padding(padding::top(self.header_height).bottom(self.input_height))
+            ])
             .id(CHAT)
             .spacing(10)
             .height(Fill)
@@ -653,82 +656,96 @@ impl Conversation {
                 .max_width(600)
         };
 
-        let chat = stack![
-            column![header, messages].spacing(10).align_x(Center),
-            bottom_center(
-                pop(input)
+        let header = container(header)
+            .padding(padding::bottom(15))
+            .style(|theme| container::Style {
+                background: Some(
+                    gradient::Linear::new(0)
+                        .add_stop(0.0, Color::TRANSPARENT)
+                        .add_stop(0.1, theme.palette().background.scale_alpha(0.95))
+                        .add_stop(1.0, theme.palette().background)
+                        .into(),
+                ),
+                ..container::Style::default()
+            });
+
+        let input = container(input)
+            .padding(padding::top(10))
+            .style(|theme| container::Style {
+                background: Some(
+                    gradient::Linear::new(Degrees(180.0))
+                        .add_stop(0.0, Color::TRANSPARENT)
+                        .add_stop(0.05, theme.palette().background)
+                        .into(),
+                ),
+                ..container::Style::default()
+            });
+
+        stack![
+            sensor(messages)
+                .key(self.id)
+                .on_show(Message::Resized)
+                .on_resize(Message::Resized),
+            column![
+                sensor(opaque(header))
+                    .key(self.id)
+                    .on_show(Message::HeaderShown)
+                    .on_resize(Message::HeaderResized),
+                vertical_space(),
+                sensor(input)
+                    .key(self.id)
                     .on_show(Message::InputResized)
                     .on_resize(Message::InputResized)
-            ),
-        ];
+            ]
+            .align_x(Center)
+            .padding(padding::right(
+                (self.total_width - self.chat_width).clamp(0.0, 20.0)
+            ))
+        ]
+        .into()
+    }
 
-        if self.sidebar_open {
-            let sidebar = {
-                let new = button(text("New Chat").width(Fill).align_x(Center))
-                    .on_press(Message::New)
-                    .style(button::success);
+    pub fn sidebar(&self) -> Element<'_, Message> {
+        let header = sidebar_section("Chats", icon::plus(), Message::New);
 
-                let search = button(text("Search Models").width(Fill).align_x(Center))
-                    .on_press(Message::Search)
-                    .style(button::secondary);
+        let chats = column(self.chats.iter().map(|chat| {
+            let card = match &chat.title {
+                Some(title) => ellipsized_text(title),
+                None => ellipsized_text(chat.file.model.name()).font(Font::MONOSPACE),
+            }
+            .wrapping(text::Wrapping::None);
 
-                if self.chats.is_empty() {
-                    column![vertical_space(), new, search]
-                } else {
-                    let chats = column(self.chats.iter().map(|chat| {
-                        let card: Element<'_, _> = match &chat.title {
-                            Some(title) => {
-                                let title = text(title).font(Font::MONOSPACE);
-                                let subtitle =
-                                    text(chat.file.model.name()).font(Font::MONOSPACE).size(10);
+            let is_active = Some(&chat.id) == self.id.as_ref();
 
-                                column![title, subtitle].spacing(3).into()
-                            }
-                            None => text(chat.file.model.name()).font(Font::MONOSPACE).into(),
-                        };
+            button(card)
+                .on_press_with(move || Message::Open(chat.id))
+                .padding([8, 10])
+                .width(Fill)
+                .style(move |theme, status| {
+                    let base = button::Style {
+                        border: border::rounded(5),
+                        ..button::subtle(theme, status)
+                    };
 
-                        let is_active = Some(&chat.id) == self.id.as_ref();
+                    if is_active && status == button::Status::Active {
+                        let background = theme.extended_palette().background.weak;
 
-                        if is_active {
-                            container(card)
-                                .style(|theme: &Theme| {
-                                    let pair = theme.extended_palette().secondary.weak;
-
-                                    container::Style {
-                                        background: Some(pair.color.into()),
-                                        text_color: Some(pair.text),
-                                        border: border::rounded(2),
-                                        ..container::Style::default()
-                                    }
-                                })
-                                .padding(5)
-                                .width(Fill)
-                                .into()
-                        } else {
-                            button(card)
-                                .on_press_with(move || Message::Open(chat.id))
-                                .padding(5)
-                                .width(Fill)
-                                .style(|theme: &Theme, status: button::Status| match status {
-                                    button::Status::Active => button::text(theme, status),
-                                    _ => button::secondary(theme, status),
-                                })
-                                .into()
+                        button::Style {
+                            background: Some(background.color.into()),
+                            text_color: background.text,
+                            ..base
                         }
-                    }))
-                    .clip(true)
-                    .spacing(10);
+                    } else {
+                        base
+                    }
+                })
+                .into()
+        }))
+        .clip(true);
 
-                    column![scrollable(chats).height(Fill).spacing(10), new, search]
-                }
-                .width(250)
-                .spacing(10)
-            };
-
-            row![sidebar, chat].spacing(10).padding(10).into()
-        } else {
-            container(chat).padding(10).into()
-        }
+        column![header, scrollable(chats).height(Fill).spacing(10)]
+            .spacing(10)
+            .into()
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
@@ -814,8 +831,8 @@ impl Item {
                             let palette = theme.extended_palette();
 
                             container::Style {
-                                background: Some(palette.background.strong.color.into()),
-                                text_color: Some(palette.background.strong.text),
+                                background: Some(palette.background.weak.color.into()),
+                                text_color: Some(palette.background.weak.text),
                                 border: border::rounded(10),
                                 ..container::Style::default()
                             }

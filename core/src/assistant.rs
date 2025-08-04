@@ -1,5 +1,4 @@
 use crate::model;
-use crate::request;
 use crate::Error;
 
 use serde::Deserialize;
@@ -8,6 +7,7 @@ use sipper::{sipper, FutureExt, Sipper, Straw, StreamExt};
 use tokio::process;
 
 use std::env;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -22,11 +22,9 @@ impl Assistant {
     const LLAMA_CPP_CONTAINER_CUDA: &'static str = "ghcr.io/ggerganov/llama.cpp:server-cuda-b4600";
     const LLAMA_CPP_CONTAINER_ROCM: &'static str = "ghcr.io/hecrj/icebreaker:server-rocm-b4600";
 
-    const MODELS_DIR: &'static str = "./models";
     const HOST_PORT: u64 = 8080;
 
     pub fn boot(file: model::File, backend: Backend) -> impl Straw<Self, BootEvent, Error> {
-        use tokio::fs;
         use tokio::io::{self, AsyncBufReadExt};
         use tokio::process;
         use tokio::task;
@@ -48,103 +46,30 @@ impl Assistant {
         sipper(move |sender| async move {
             let mut sender = Sender(sender);
 
-            fs::create_dir_all(Self::MODELS_DIR).await?;
+            let mut download = model::Library::download(file.clone()).pin();
+            let mut last_percent = None;
 
-            let model_path = format!(
-                "{directory}/{filename}",
-                directory = Self::MODELS_DIR,
-                filename = file.name
-            );
+            while let Some(progress) = download.sip().await {
+                if let Some((total, percent)) = progress.percent() {
+                    sender.progress("Downloading model...", percent).await;
 
-            if fs::try_exists(&model_path).await? {
-                sender.progress("Verifying model...", 0).await;
-                sender
-                    .log(format!(
-                        "{filename} found. Verifying...",
-                        filename = file.name
-                    ))
-                    .await;
+                    if Some(percent) != last_percent {
+                        last_percent = Some(percent);
 
-                let metadata = reqwest::get(format!(
-                    "https://huggingface.co/{model}/raw/main/{filename}",
-                    model = file.model.0,
-                    filename = file.name
-                ))
-                .await?
-                .text()
-                .await?;
-
-                let size: u64 = metadata
-                    .lines()
-                    .next_back()
-                    .unwrap_or_default()
-                    .split_whitespace()
-                    .next_back()
-                    .unwrap_or_default()
-                    .parse()
-                    .unwrap_or_default();
-
-                let file_metadata = fs::metadata(&model_path).await?;
-
-                if size == file_metadata.len() {
-                    sender.log(format!("File sizes match! {size} bytes")).await;
-                } else {
-                    sender
-                        .log(format!(
-                            "Invalid file size. Deleting {filename}...",
-                            filename = file.name
-                        ))
-                        .await;
-
-                    fs::remove_file(&model_path).await?;
-                }
-            }
-
-            if !fs::try_exists(&model_path).await? {
-                sender
-                    .log(format!(
-                        "{filename} not found. Starting download...",
-                        filename = file.name
-                    ))
-                    .await;
-
-                sender
-                    .log(format!("Downloading {file}...", file = file.name))
-                    .await;
-
-                let url = format!(
-                    "https://huggingface.co\
-                            /{id}/resolve/main/\
-                            {filename}?download=true",
-                    id = file.model.0,
-                    filename = file.name
-                );
-
-                let mut download = request::download_file(url, &model_path).pin();
-                let mut last_percent = None;
-
-                while let Some(progress) = download.sip().await {
-                    if let Some((total, percent)) = progress.percent() {
-                        sender.progress("Downloading model...", percent).await;
-
-                        if Some(percent) != last_percent {
-                            last_percent = Some(percent);
-
-                            sender
-                                .log(format!(
-                                    "=> {percent}% {downloaded:.2}GB of {total:.2}GB \
+                        sender
+                            .log(format!(
+                                "=> {percent}% {downloaded:.2}GB of {total:.2}GB \
                                     @ {speed:.2} MB/s",
-                                    downloaded = progress.downloaded as f32 / 10f32.powi(9),
-                                    total = total as f32 / 10f32.powi(9),
-                                    speed = progress.speed as f32 / 10f32.powi(6),
-                                ))
-                                .await;
-                        }
+                                downloaded = progress.downloaded as f32 / 10f32.powi(9),
+                                total = total as f32 / 10f32.powi(9),
+                                speed = progress.speed as f32 / 10f32.powi(6),
+                            ))
+                            .await;
                     }
                 }
-
-                download.await?;
             }
+
+            let model_path = download.await?;
 
             sender.progress("Detecting executor...", 0).await;
 
@@ -173,7 +98,9 @@ impl Assistant {
                     ))
                     .await;
 
-                let mut server = Server::launch_with_executable("llama-server", &file, backend)?;
+                let mut server =
+                    Server::launch_with_executable("llama-server", &model_path, backend)?;
+
                 let stdout = server.stdout.take();
                 let stderr = server.stderr.take();
 
@@ -192,16 +119,18 @@ impl Assistant {
 
                 sender.progress("Preparing container...", 0).await;
 
+                let library = model::Library::path().await;
+
                 let command = match backend {
                     Backend::Cpu => {
                         format!(
                             "create --rm -p {port}:80 -v {volume}:/models \
                             {container} --model /models/{filename} \
                             --port 80 --host 0.0.0.0",
-                            filename = file.name,
+                            filename = file.relative_path().display(),
                             container = Self::LLAMA_CPP_CONTAINER_CPU,
                             port = Self::HOST_PORT,
-                            volume = Self::MODELS_DIR,
+                            volume = library.display(),
                         )
                     }
                     Backend::Cuda => {
@@ -209,10 +138,10 @@ impl Assistant {
                             "create --rm --gpus all -p {port}:80 -v {volume}:/models \
                             {container} --model /models/{filename} \
                             --port 80 --host 0.0.0.0 --gpu-layers 40",
-                            filename = file.name,
+                            filename = file.relative_path().display(),
                             container = Self::LLAMA_CPP_CONTAINER_CUDA,
                             port = Self::HOST_PORT,
-                            volume = Self::MODELS_DIR,
+                            volume = library.display(),
                         )
                     }
                     Backend::Rocm => {
@@ -222,10 +151,10 @@ impl Assistant {
                             --security-opt seccomp=unconfined --group-add video \
                             {container} --model /models/{filename} \
                             --port 80 --host 0.0.0.0 --gpu-layers 40",
-                            filename = file.name,
+                            filename = file.relative_path().display(),
                             container = Self::LLAMA_CPP_CONTAINER_ROCM,
                             port = Self::HOST_PORT,
-                            volume = Self::MODELS_DIR,
+                            volume = library.display(),
                         )
                     }
                 };
@@ -605,7 +534,7 @@ enum Server {
 impl Server {
     fn launch_with_executable(
         executable: &'static str,
-        file: &model::File,
+        file: &Path,
         backend: Backend,
     ) -> Result<process::Child, Error> {
         let gpu_flags = match backend {
@@ -617,9 +546,8 @@ impl Server {
 
         let server = process::Command::new(executable)
             .args(Self::parse_args(&format!(
-                "--model models/{filename} \
-                    --port 8080 --host 0.0.0.0 {gpu_flags} {custom_args}",
-                filename = file.name,
+                "--model {file} --port 8080 --host 0.0.0.0 {gpu_flags} {custom_args}",
+                file = file.display(),
             )))
             .kill_on_drop(true)
             .stdout(std::process::Stdio::piped())

@@ -9,6 +9,7 @@ repository = "https://github.com/hecrj/icebreaker"
 
 [dependencies]
 icebreaker_core.workspace = true
+function.workspace = true
 itertools.workspace = true
 log.workspace = true
 open.workspace = true
@@ -67,10 +68,10 @@ large-enum-variant = "allow"
 
 [patch.crates-io]
 iced.git = "https://github.com/iced-rs/iced.git"
-iced.rev = "d475ae5b454b82cb549d6dd961ae158eb5ac7f19"
+iced.rev = "148fc77b8fbe0c8ad9b85428aa4c3bdac80c4b19"
 
 iced_core.git = "https://github.com/iced-rs/iced.git"
-iced_core.rev = "d475ae5b454b82cb549d6dd961ae158eb5ac7f19"
+iced_core.rev = "148fc77b8fbe0c8ad9b85428aa4c3bdac80c4b19"
 
 iced_palace.git = "https://github.com/hecrj/iced_palace"
-iced_palace.rev = "14506bd5b97afe360603eaeb0da2611eab35f14c"
+iced_palace.rev = "cb8f841b638c3886c6582e3d7f2e1de8c67e2e2b"

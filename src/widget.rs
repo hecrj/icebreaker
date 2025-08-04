@@ -7,8 +7,8 @@ pub mod tip {
 use crate::icon;
 
 use iced::border;
-use iced::widget::{button, container, row, text, tooltip, Button, Text};
-use iced::{Center, Element, Fill, Theme};
+use iced::widget::{button, container, horizontal_space, iced, row, text, tooltip, Button, Text};
+use iced::{Center, Element, Fill, Font, Theme};
 
 pub fn tip<'a, Message: 'a>(
     target: impl Into<Element<'a, Message>>,
@@ -103,4 +103,86 @@ where
         label,
         tip::Position::Bottom,
     )
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Link {
+    Rust,
+    Iced,
+    HuggingFace,
+    LlamaCpp,
+}
+
+impl Link {
+    #[allow(dead_code)]
+    pub fn url(self) -> &'static str {
+        match self {
+            Self::Rust => "https://rust-lang.org",
+            Self::Iced => "https://iced.rs",
+            Self::HuggingFace => "https://huggingface.co",
+            Self::LlamaCpp => "https://github.com/ggerganov/llama.cpp",
+        }
+    }
+}
+
+#[allow(dead_code)]
+pub fn about<'a>() -> Element<'a, Link> {
+    let text = |content| text(content).font(Font::MONOSPACE).size(12);
+
+    let link = |button: button::Button<'static, Link>, link| {
+        button.on_press(link).padding(0).style(button::text)
+    };
+
+    let rust = link(
+        button(text("🦀 Rust").shaping(text::Shaping::Advanced)),
+        Link::Rust,
+    );
+
+    let iced = link(button(iced(12)), Link::Iced);
+
+    let hugging_face = link(
+        button(text("🤗 Hugging Face").shaping(text::Shaping::Advanced)),
+        Link::HuggingFace,
+    );
+
+    let llama_cpp = link(
+        button(text("🦙 llama.cpp").shaping(text::Shaping::Advanced)),
+        Link::LlamaCpp,
+    );
+
+    row![
+        text("Made with"),
+        rust,
+        text("and"),
+        iced,
+        horizontal_space(),
+        text("Powered by"),
+        hugging_face,
+        text("and"),
+        llama_cpp,
+    ]
+    .spacing(7)
+    .align_y(Center)
+    .into()
+}
+
+pub fn sidebar_section<'a, Message: Clone + 'a>(
+    title: impl text::IntoFragment<'a>,
+    icon: Text<'a>,
+    on_icon_press: Message,
+) -> Element<'a, Message> {
+    row![
+        text(title).width(Fill).font(Font::MONOSPACE),
+        button(icon.line_height(1.0))
+            .on_press(on_icon_press)
+            .padding([8, 10])
+            .style(|theme, status| {
+                button::Style {
+                    border: border::rounded(5),
+                    ..button::subtle(theme, status)
+                }
+            })
+    ]
+    .align_y(Center)
+    .into()
 }
