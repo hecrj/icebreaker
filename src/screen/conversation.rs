@@ -15,9 +15,9 @@ use iced::padding;
 use iced::task::{self, Task};
 use iced::time::{self, Duration, Instant};
 use iced::widget::{
-    self, bottom, button, center, center_x, center_y, column, container, horizontal_space, hover,
-    opaque, progress_bar, right, right_center, row, scrollable, sensor, stack, text, text_editor,
-    tooltip, value, vertical_space,
+    self, bottom, bottom_right, button, center, center_x, center_y, column, container,
+    horizontal_space, hover, opaque, progress_bar, right, right_center, row, scrollable, sensor,
+    stack, text, text_editor, tooltip, value, vertical_space,
 };
 use iced::Degrees;
 use iced::{Center, Color, Element, Fill, Font, Function, Shrink, Size, Subscription, Theme};
@@ -626,9 +626,9 @@ impl Conversation {
             let editor = text_editor(&self.input)
                 .placeholder("Type your message here...")
                 .on_action(Message::InputChanged)
-                .padding(padding::all(10).bottom(50))
-                .min_height(51)
-                .max_height(16.0 * 1.3 * 20.0) // approx. 20 lines with 1.3 line height
+                .padding(padding::all(15).bottom(50))
+                .min_height(16.0 * 1.3 * 2.0) // approx. 2 lines with 1.3 line height
+                .max_height(16.0 * 1.3 * 20.0) // approx. 20 lines
                 .key_binding(|key_press| {
                     let modifiers = key_press.modifiers;
 
@@ -638,6 +638,14 @@ impl Conversation {
                         }
                         binding => binding,
                     }
+                })
+                .style(|theme, status| {
+                    let style = text_editor::default(theme, status);
+
+                    text_editor::Style {
+                        border: style.border.rounded(10),
+                        ..style
+                    }
                 });
 
             let strategy = {
@@ -645,10 +653,10 @@ impl Conversation {
                     toggle(icon::globe(), "Search", self.strategy.search)
                         .on_press(Message::ToggleSearch),
                     "Very Experimental!",
-                    tip::Position::Right,
+                    tip::Position::Left,
                 );
 
-                bottom(search).padding(10)
+                bottom_right(search).padding(10)
             };
 
             container(stack![editor, strategy])
@@ -669,17 +677,21 @@ impl Conversation {
                 ..container::Style::default()
             });
 
-        let input = container(input)
-            .padding(padding::top(10))
-            .style(|theme| container::Style {
-                background: Some(
-                    gradient::Linear::new(Degrees(180.0))
-                        .add_stop(0.0, Color::TRANSPARENT)
-                        .add_stop(0.05, theme.palette().background)
-                        .into(),
-                ),
-                ..container::Style::default()
-            });
+        let input = column![
+            container(horizontal_space())
+                .height(10)
+                .style(|theme: &Theme| container::Style {
+                    background: Some(
+                        gradient::Linear::new(Degrees(180.0))
+                            .add_stop(0.0, Color::TRANSPARENT)
+                            .add_stop(1.0, theme.palette().background)
+                            .into(),
+                    ),
+                    ..container::Style::default()
+                }),
+            input
+        ]
+        .align_x(Center);
 
         stack![
             sensor(messages)
@@ -697,7 +709,6 @@ impl Conversation {
                     .on_show(Message::InputResized)
                     .on_resize(Message::InputResized)
             ]
-            .align_x(Center)
             .padding(padding::right(
                 (self.total_width - self.chat_width).clamp(0.0, 20.0)
             ))

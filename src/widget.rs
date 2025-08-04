@@ -31,44 +31,30 @@ pub fn toggle<'a, Message: 'a>(
     is_toggled: bool,
 ) -> Button<'a, Message> {
     button(
-        row![icon.size(12), text(label).size(12)]
-            .spacing(8)
-            .height(Fill)
-            .align_y(Center),
+        row![
+            if is_toggled { icon::check() } else { icon }
+                .width(12)
+                .size(12)
+                .center()
+                .line_height(1.0),
+            text(label).size(12)
+        ]
+        .spacing(8)
+        .height(Fill)
+        .align_y(Center),
     )
     .height(30)
     .style(move |theme: &Theme, status| {
-        if is_toggled {
-            button::Style {
-                border: border::rounded(5),
-                ..button::primary(
-                    theme,
-                    match status {
-                        button::Status::Active => button::Status::Hovered,
-                        button::Status::Hovered => button::Status::Active,
-                        _ => status,
-                    },
-                )
-            }
-        } else {
-            let palette = theme.extended_palette();
+        let style = button::background(theme, status);
 
-            let base = button::Style {
-                text_color: palette.background.base.text,
-                border: border::rounded(5)
-                    .width(1)
-                    .color(palette.background.base.text),
-                ..button::Style::default()
-            };
-
-            match status {
-                button::Status::Active | button::Status::Pressed => base,
-                button::Status::Hovered => button::Style {
-                    background: Some(palette.background.base.text.scale_alpha(0.2).into()),
-                    ..base
-                },
-                button::Status::Disabled => button::Style::default(),
-            }
+        button::Style {
+            border: border::rounded(5),
+            text_color: if is_toggled {
+                theme.palette().primary
+            } else {
+                style.text_color
+            },
+            ..style
         }
     })
 }
