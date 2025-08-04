@@ -8,14 +8,17 @@ mod ui;
 mod widget;
 
 use crate::core::assistant;
+use crate::core::model;
 use crate::core::{Chat, Error};
-use crate::screen::boot;
 use crate::screen::conversation;
 use crate::screen::search;
 use crate::screen::Screen;
 
 use iced::system;
-use iced::{Element, Subscription, Task, Theme};
+use iced::widget::{button, column, container, row, rule, vertical_rule, vertical_space, Text};
+use iced::{Center, Element, Fill, Subscription, Task, Theme};
+
+use std::mem;
 
 pub fn main() -> iced::Result {
     tracing_subscriber::fmt::init();
@@ -30,6 +33,8 @@ pub fn main() -> iced::Result {
 
 struct Icebreaker {
     screen: Screen,
+    library: model::Library,
+    last_conversation: Option<screen::Conversation>,
     system: Option<system::Information>,
 }
 
@@ -39,10 +44,12 @@ enum Message {
         last_chat: Result<Chat, Error>,
         system: Box<system::Information>,
     },
+    Scanned(Result<model::Library, Error>),
     Escape,
     Search(search::Message),
-    Boot(boot::Message),
     Conversation(conversation::Message),
+    Chats,
+    Discover,
 }
 
 impl Icebreaker {
@@ -50,16 +57,21 @@ impl Icebreaker {
         (
             Self {
                 screen: Screen::Loading,
+                library: model::Library::default(),
+                last_conversation: None,
                 system: None,
             },
-            Task::future(Chat::fetch_last_opened()).then(|last_chat| {
-                system::fetch_information()
-                    .map(Box::new)
-                    .map(move |system| Message::Loaded {
-                        last_chat: last_chat.clone(),
-                        system,
-                    })
-            }),
+            Task::batch([
+                Task::future(Chat::fetch_last_opened()).then(|last_chat| {
+                    system::fetch_information()
+                        .map(Box::new)
+                        .map(move |system| Message::Loaded {
+                            last_chat: last_chat.clone(),
+                            system,
+                        })
+                }),
+                Task::perform(model::Library::scan(), Message::Scanned),
+            ]),
         )
     }
 
@@ -67,7 +79,6 @@ impl Icebreaker {
         match &self.screen {
             Screen::Loading => "Icebreaker".to_owned(),
             Screen::Search(search) => search.title(),
-            Screen::Boot(boot) => boot.title(),
             Screen::Conversation(conversation) => conversation.title(),
         }
     }
@@ -93,6 +104,11 @@ impl Icebreaker {
                     }
                 }
             }
+            Message::Scanned(Ok(library)) => {
+                self.library = library;
+
+                Task::none()
+            }
             Message::Search(message) => {
                 if let Screen::Search(search) = &mut self.screen {
                     let action = search.update(message);
@@ -100,48 +116,40 @@ impl Icebreaker {
                     match action {
                         search::Action::None => Task::none(),
                         search::Action::Run(task) => task.map(Message::Search),
-                        search::Action::Boot(model) => {
-                            let (boot, task) = screen::Boot::new(model, self.system.as_ref());
+                        search::Action::Boot(file) => {
+                            let backend = self
+                                .system
+                                .as_ref()
+                                .map(|system| assistant::Backend::detect(&system.graphics_adapter))
+                                .unwrap_or(assistant::Backend::Cpu);
 
-                            self.screen = Screen::Boot(boot);
-
-                            task.map(Message::Boot)
-                        }
-                    }
-                } else {
-                    Task::none()
-                }
-            }
-            Message::Boot(message) => {
-                if let Screen::Boot(search) = &mut self.screen {
-                    let action = search.update(message);
-
-                    match action {
-                        boot::Action::None => Task::none(),
-                        boot::Action::Boot { file, backend } => {
                             let (conversation, task) = screen::Conversation::new(file, backend);
 
                             self.screen = Screen::Conversation(conversation);
 
                             task.map(Message::Conversation)
                         }
-                        boot::Action::Abort => self.search(),
                     }
                 } else {
                     Task::none()
                 }
             }
             Message::Conversation(message) => {
-                if let Screen::Conversation(conversation) = &mut self.screen {
-                    let action = conversation.update(message);
-
-                    match action {
-                        conversation::Action::None => Task::none(),
-                        conversation::Action::Run(task) => task.map(Message::Conversation),
-                        conversation::Action::Back => self.search(),
-                    }
+                let conversation = if let Screen::Conversation(conversation) = &mut self.screen {
+                    Some(conversation)
                 } else {
-                    Task::none()
+                    self.last_conversation.as_mut()
+                };
+
+                let Some(conversation) = conversation else {
+                    return Task::none();
+                };
+
+                let action = conversation.update(message);
+
+                match action {
+                    conversation::Action::None => Task::none(),
+                    conversation::Action::Run(task) => task.map(Message::Conversation),
                 }
             }
             Message::Escape => {
@@ -151,18 +159,99 @@ impl Icebreaker {
                     self.search()
                 }
             }
+            Message::Chats => {
+                if let Some(conversation) = self.last_conversation.take() {
+                    self.screen = Screen::Conversation(conversation);
+                }
+
+                Task::none()
+            }
+            Message::Discover => {
+                if let Screen::Conversation(conversation) =
+                    mem::replace(&mut self.screen, Screen::Loading)
+                {
+                    self.last_conversation = Some(conversation);
+                }
+
+                self.search()
+            }
+            Message::Scanned(Err(error)) => {
+                log::error!("{error}");
+
+                Task::none()
+            }
         }
     }
 
     fn view(&self) -> Element<'_, Message> {
-        match &self.screen {
+        let sidebar = {
+            let content = match &self.screen {
+                Screen::Conversation(conversation) => {
+                    conversation.sidebar().map(Message::Conversation)
+                }
+                Screen::Search(search) => search.sidebar(&self.library).map(Message::Search),
+                _ => vertical_space().into(),
+            };
+
+            let tab = |icon: Text<'static>, toggled, message| {
+                button(icon.width(Fill).align_x(Center))
+                    .padding([10, 0])
+                    .on_press_maybe(message)
+                    .width(Fill)
+                    .style(move |theme: &Theme, status| {
+                        let palette = theme.extended_palette();
+
+                        let base = button::text(theme, status);
+
+                        if toggled {
+                            button::Style {
+                                background: Some(palette.background.weakest.color.into()),
+                                text_color: palette.background.weakest.text,
+                                ..base
+                            }
+                        } else {
+                            base
+                        }
+                    })
+            };
+
+            let tabs = container(row![
+                tab(
+                    icon::chat(),
+                    matches!(self.screen, Screen::Conversation(_)),
+                    self.last_conversation.is_some().then_some(Message::Chats),
+                ),
+                tab(
+                    icon::cubes(),
+                    matches!(self.screen, Screen::Search(_)),
+                    Some(Message::Discover),
+                ),
+            ])
+            .style(|theme| {
+                container::Style::default()
+                    .background(theme.extended_palette().background.base.color)
+            });
+
+            row![
+                container(column![container(content).padding(10), tabs])
+                    .width(250)
+                    .style(|theme| {
+                        container::Style::default()
+                            .background(theme.extended_palette().background.weakest.color)
+                    }),
+                vertical_rule(1).style(rule::weak),
+            ]
+        };
+
+        let screen = match &self.screen {
             Screen::Loading => screen::loading(),
-            Screen::Search(search) => search.view().map(Message::Search),
-            Screen::Boot(boot) => boot.view(self.theme()).map(Message::Boot),
+            Screen::Search(search) => search.view(&self.library).map(Message::Search),
             Screen::Conversation(conversation) => {
                 conversation.view(&self.theme()).map(Message::Conversation)
             }
-        }
+        };
+
+        row![sidebar, container(screen).padding(10)].into()
     }
 
     fn subscription(&self) -> Subscription<Message> {
@@ -170,8 +259,7 @@ impl Icebreaker {
 
         let screen = match &self.screen {
             Screen::Loading => Subscription::none(),
-            Screen::Search(search) => search.subscription().map(Message::Search),
-            Screen::Boot(_) => Subscription::none(),
+            Screen::Search(_) => Subscription::none(),
             Screen::Conversation(conversation) => {
                 conversation.subscription().map(Message::Conversation)
             }

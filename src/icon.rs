@@ -1,6 +1,6 @@
 // Generated automatically by iced_fontello at build time.
 // Do not edit manually. Source: ../fonts/icebreaker-icons.toml
-// 8e94c2691fd8f7ef54e0c9d68ddc9c0c32db5b08851d08c814690922b7fbb3aa
+// 142772a4c1ccedab0baec3a6af418d859fa5b32db9c124b91a1601e0051f1127
 use iced::widget::{text, Text};
 use iced::Font;
 
@@ -18,6 +18,14 @@ pub fn arrow_up<'a>() -> Text<'a> {
     icon("\u{E75F}")
 }
 
+pub fn chat<'a>() -> Text<'a> {
+    icon("\u{E0AC}")
+}
+
+pub fn check<'a>() -> Text<'a> {
+    icon("\u{2713}")
+}
+
 pub fn clipboard<'a>() -> Text<'a> {
     icon("\u{F0C5}")
 }
@@ -26,32 +34,48 @@ pub fn clock<'a>() -> Text<'a> {
     icon("\u{1F554}")
 }
 
-pub fn collapse<'a>() -> Text<'a> {
-    icon("\u{F191}")
+pub fn cubes<'a>() -> Text<'a> {
+    icon("\u{F1B3}")
 }
 
 pub fn download<'a>() -> Text<'a> {
     icon("\u{1F4E5}")
 }
 
-pub fn expand<'a>() -> Text<'a> {
-    icon("\u{F152}")
-}
-
 pub fn globe<'a>() -> Text<'a> {
     icon("\u{E02F}")
 }
 
-pub fn heart<'a>() -> Text<'a> {
-    icon("\u{2665}")
+pub fn left<'a>() -> Text<'a> {
+    icon("\u{E00E}")
 }
 
 pub fn link<'a>() -> Text<'a> {
     icon("\u{F08E}")
 }
 
+pub fn plus<'a>() -> Text<'a> {
+    icon("\u{2B}")
+}
+
 pub fn refresh<'a>() -> Text<'a> {
     icon("\u{E01E}")
+}
+
+pub fn search<'a>() -> Text<'a> {
+    icon("\u{1F50D}")
+}
+
+pub fn server<'a>() -> Text<'a> {
+    icon("\u{F233}")
+}
+
+pub fn sliders<'a>() -> Text<'a> {
+    icon("\u{F1DE}")
+}
+
+pub fn star<'a>() -> Text<'a> {
+    icon("\u{2605}")
 }
 
 pub fn trash<'a>() -> Text<'a> {
