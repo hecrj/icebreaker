@@ -1,7 +1,10 @@
 use std::{path::PathBuf, time::Duration};
 
 use iced::{
-    widget::{button, container, text, text_input, vertical_space, Column, Row}, Element, Font, Length::Fill, Task
+    widget::{button, column, container, row, text, text_input, vertical_space},
+    Element, Font,
+    Length::Fill,
+    Task,
 };
 
 use crate::icon::folder_open;
@@ -107,17 +110,22 @@ impl Settings {
     }
 
     pub fn view<'a>(&'a self) -> Element<'a, Message> {
-        let set_model_dir = Row::new()
-            .push(text_input("model dir", &self.model_dir).on_input(Message::ManualTextChange))
-            .push(button(folder_open()).on_press(Message::SetDirWithRFD));
+        let set_model_dir = column![
+            text("Model Directory").font(Font::MONOSPACE),
+            row![
+                text_input("model dir", &self.model_dir).on_input(Message::ManualTextChange),
+                button(folder_open()).on_press(Message::SetDirWithRFD)
+            ].spacing(5)
+        ];
 
         container(set_model_dir).into()
     }
 
     pub fn sidebar<'a>(&'a self) -> Element<'a, Message> {
-        Column::new()
-            .push(text("Settings").width(Fill).font(Font::MONOSPACE))
-            .push(vertical_space())
-            .into()
+        column![
+            text("Settings").width(Fill).font(Font::MONOSPACE),
+            vertical_space()
+        ]
+        .into()
     }
 }
