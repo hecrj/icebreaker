@@ -231,6 +231,7 @@ impl Icebreaker {
                     conversation.sidebar().map(Message::Conversation)
                 }
                 Screen::Search(search) => search.sidebar(&self.library).map(Message::Search),
+                Screen::Settings(settings) => settings.sidebar().map(Message::Settings),
                 _ => vertical_space().into(),
             };
 
