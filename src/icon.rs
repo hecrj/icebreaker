@@ -1,6 +1,6 @@
 // Generated automatically by iced_fontello at build time.
 // Do not edit manually. Source: ../fonts/icebreaker-icons.toml
-// 142772a4c1ccedab0baec3a6af418d859fa5b32db9c124b91a1601e0051f1127
+// ff0346b2b42b9266839aa123eae5c3703072c9b683ef73a8e388389c787d81c1
 use iced::widget::{text, Text};
 use iced::Font;
 
@@ -40,6 +40,10 @@ pub fn cubes<'a>() -> Text<'a> {
 
 pub fn download<'a>() -> Text<'a> {
     icon("\u{1F4E5}")
+}
+
+pub fn folder_open<'a>() -> Text<'a> {
+    icon("\u{1F4C2}")
 }
 
 pub fn globe<'a>() -> Text<'a> {
