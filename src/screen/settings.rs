@@ -91,6 +91,7 @@ impl Settings {
                 if let Some(p) = path {
                     if p.exists() && p.is_dir() {
                         log::info!("Selected directory: {}", p.display());
+                        self.model_dir = p.to_string_lossy().to_string();
                         config.model_dir = p;
                         let config = config.clone();
                         Action::Run(Task::perform(
