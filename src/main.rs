@@ -68,21 +68,29 @@ impl Icebreaker {
                 system: None,
                 config: config::Config::default(),
             },
-            Task::batch([
-                Task::future(async {
-                    iced::futures::join!(Chat::fetch_last_opened(), config::Config::load())
-                })
-                .then(|(last_chat, config)| {
+            Task::future(async {
+                iced::futures::join!(Chat::fetch_last_opened(), config::Config::load())
+            })
+            .then(|(last_chat, config)| {
+                Task::batch([
+                    Task::perform(
+                        model::Library::scan(
+                            config
+                                .as_ref()
+                                .map(|config| config.model_dir.to_owned())
+                                .unwrap_or_else(|_| config::Config::default().model_dir),
+                        ),
+                        Message::Scanned,
+                    ),
                     system::fetch_information()
                         .map(Box::new)
                         .map(move |system| Message::Loaded {
                             last_chat: last_chat.clone(),
                             config: config.clone(),
                             system,
-                        })
-                }),
-                Task::perform(model::Library::scan(), Message::Scanned),
-            ]),
+                        }),
+                ])
+            }),
         )
     }
 
@@ -132,7 +140,8 @@ impl Icebreaker {
 
                 match last_chat {
                     Ok(last_chat) => {
-                        let (conversation, task) = screen::Conversation::open(last_chat, backend);
+                        let (conversation, task) =
+                            screen::Conversation::open(last_chat, backend, &self.config.model_dir);
 
                         self.screen = Screen::Conversation(conversation);
 
@@ -164,7 +173,8 @@ impl Icebreaker {
                                 .map(|system| assistant::Backend::detect(&system.graphics_adapter))
                                 .unwrap_or(assistant::Backend::Cpu);
 
-                            let (conversation, task) = screen::Conversation::new(file, backend);
+                            let (conversation, task) =
+                                screen::Conversation::new(file, backend, &self.config.model_dir);
 
                             self.screen = Screen::Conversation(conversation);
 
@@ -272,7 +282,8 @@ impl Icebreaker {
                     icon::cog(),
                     matches!(self.screen, Screen::Settings(_)),
                     Some(Message::GoToSettings),
-                ).width(iced::Length::Fixed(50.0)),
+                )
+                .width(iced::Length::Fixed(50.0)),
             ])
             .style(|theme| {
                 container::Style::default()
@@ -332,7 +343,10 @@ impl Icebreaker {
         self.screen = Screen::Search(search);
 
         Task::batch([
-            Task::perform(model::Library::scan(), Message::Scanned),
+            Task::perform(
+                model::Library::scan(self.config.model_dir.to_owned()),
+                Message::Scanned,
+            ),
             task.map(Message::Search),
         ])
     }

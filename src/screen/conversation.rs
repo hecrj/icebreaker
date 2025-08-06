@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::core::assistant::{Assistant, Backend, BootEvent};
 use crate::core::chat::{self, Chat, Entry, Id, Strategy};
 use crate::core::model::File;
@@ -37,6 +39,7 @@ pub struct Conversation {
     total_width: f32,
     strategy: Strategy,
     error: Option<Error>,
+    model_dir: PathBuf,
 }
 
 enum State {
@@ -92,9 +95,13 @@ pub enum Action {
 }
 
 impl Conversation {
-    pub fn new(file: File, backend: Backend) -> (Self, Task<Message>) {
+    pub fn new(
+        file: File,
+        backend: Backend,
+        model_dir: impl AsRef<std::path::Path>,
+    ) -> (Self, Task<Message>) {
         let (boot, handle) = Task::sip(
-            Assistant::boot(file.clone(), backend),
+            Assistant::boot(file.clone(), backend, model_dir.as_ref().to_owned()),
             Message::Booting,
             Message::Booted,
         )
@@ -122,13 +129,14 @@ impl Conversation {
                 strategy: Strategy::default(),
                 error: None,
                 chats: Vec::new(),
+                model_dir: model_dir.as_ref().to_owned(),
             },
             Task::batch([boot, Task::perform(Chat::list(), Message::ChatsListed)]),
         )
     }
 
-    pub fn open(chat: Chat, backend: Backend) -> (Self, Task<Message>) {
-        let (conversation, task) = Self::new(chat.file, backend);
+    pub fn open(chat: Chat, backend: Backend, model_dir: impl AsRef<std::path::Path>) -> (Self, Task<Message>) {
+        let (conversation, task) = Self::new(chat.file, backend, model_dir);
 
         (
             Self {
@@ -385,7 +393,7 @@ impl Conversation {
                         Action::None
                     }
                     _ => {
-                        let (mut conversation, task) = Self::open(chat, self.backend);
+                        let (mut conversation, task) = Self::open(chat, self.backend, &self.model_dir);
                         conversation.input_height = self.input_height;
 
                         *self = conversation;

@@ -24,7 +24,7 @@ impl Assistant {
 
     const HOST_PORT: u64 = 8080;
 
-    pub fn boot(file: model::File, backend: Backend) -> impl Straw<Self, BootEvent, Error> {
+    pub fn boot(file: model::File, backend: Backend, model_dir: impl AsRef<std::path::Path>) -> impl Straw<Self, BootEvent, Error> {
         use tokio::io::{self, AsyncBufReadExt};
         use tokio::process;
         use tokio::task;
@@ -46,7 +46,7 @@ impl Assistant {
         sipper(move |sender| async move {
             let mut sender = Sender(sender);
 
-            let mut download = model::Library::download(file.clone()).pin();
+            let mut download = model::Library::download(file.clone(), &model_dir).pin();
             let mut last_percent = None;
 
             while let Some(progress) = download.sip().await {
@@ -119,7 +119,7 @@ impl Assistant {
 
                 sender.progress("Preparing container...", 0).await;
 
-                let library = model::Library::path().await;
+                let library = model_dir.as_ref();
 
                 let command = match backend {
                     Backend::Cpu => {

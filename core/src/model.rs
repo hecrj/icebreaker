@@ -331,11 +331,10 @@ pub struct Library {
 }
 
 impl Library {
-    pub async fn scan() -> Result<Self, Error> {
+    pub async fn scan(model_dir: impl AsRef<std::path::Path>) -> Result<Self, Error> {
         let mut files = Vec::new();
 
-        let path = Self::path().await;
-        let mut directory = fs::read_dir(path).await?;
+        let mut directory = fs::read_dir(model_dir).await?;
 
         while let Some(author) = directory.next_entry().await? {
             if !author.file_type().await?.is_dir() {
@@ -378,14 +377,12 @@ impl Library {
         &self.files
     }
 
-    pub async fn path() -> PathBuf {
-        // TODO: Configurable
-        PathBuf::from("./models")
-    }
-
-    pub fn download(file: File) -> impl Straw<PathBuf, request::Progress, Error> {
+    pub fn download(
+        file: File,
+        model_dir: impl AsRef<std::path::Path>,
+    ) -> impl Straw<PathBuf, request::Progress, Error> {
         sipper(async move |sender| {
-            let library = Self::path().await;
+            let library = model_dir.as_ref();
             let old_path = library.join(&file.name);
             let directory = library.join(&file.model.0);
             let model_path = directory.join(&file.name);
