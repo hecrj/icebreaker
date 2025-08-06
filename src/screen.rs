@@ -6,7 +6,6 @@ pub use conversation::Conversation;
 pub use search::Search;
 pub use settings::Settings;
 
-
 use iced::widget::horizontal_space;
 use iced::Element;
 

@@ -24,7 +24,11 @@ impl Assistant {
 
     const HOST_PORT: u64 = 8080;
 
-    pub fn boot(file: model::File, backend: Backend, model_dir: impl AsRef<std::path::Path>) -> impl Straw<Self, BootEvent, Error> {
+    pub fn boot(
+        file: model::File,
+        backend: Backend,
+        model_dir: impl AsRef<std::path::Path>,
+    ) -> impl Straw<Self, BootEvent, Error> {
         use tokio::io::{self, AsyncBufReadExt};
         use tokio::process;
         use tokio::task;
