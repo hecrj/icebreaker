@@ -2,6 +2,7 @@
 use icebreaker_core as core;
 
 mod browser;
+pub mod config;
 mod icon;
 mod screen;
 mod ui;
@@ -12,6 +13,7 @@ use crate::core::model;
 use crate::core::{Chat, Error};
 use crate::screen::conversation;
 use crate::screen::search;
+use crate::screen::settings;
 use crate::screen::Screen;
 
 use iced::system;
@@ -36,6 +38,7 @@ struct Icebreaker {
     library: model::Library,
     last_conversation: Option<screen::Conversation>,
     system: Option<system::Information>,
+    config: config::Config,
 }
 
 #[derive(Debug, Clone)]
@@ -43,11 +46,13 @@ enum Message {
     Loaded {
         last_chat: Result<Chat, Error>,
         system: Box<system::Information>,
+        config: Result<config::Config, config::Error>,
     },
     Scanned(Result<model::Library, Error>),
     Escape,
     Search(search::Message),
     Conversation(conversation::Message),
+    Settings(settings::Message),
     Chats,
     Discover,
 }
@@ -60,13 +65,18 @@ impl Icebreaker {
                 library: model::Library::default(),
                 last_conversation: None,
                 system: None,
+                config: config::Config::default(),
             },
             Task::batch([
-                Task::future(Chat::fetch_last_opened()).then(|last_chat| {
+                Task::future(async {
+                    iced::futures::join!(Chat::fetch_last_opened(), config::Config::load())
+                })
+                .then(|(last_chat, config)| {
                     system::fetch_information()
                         .map(Box::new)
                         .map(move |system| Message::Loaded {
                             last_chat: last_chat.clone(),
+                            config: config.clone(),
                             system,
                         })
                 }),
@@ -80,14 +90,40 @@ impl Icebreaker {
             Screen::Loading => "Icebreaker".to_owned(),
             Screen::Search(search) => search.title(),
             Screen::Conversation(conversation) => conversation.title(),
+            Screen::Settings(settings) => settings.title(),
         }
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::Loaded { last_chat, system } => {
+            Message::Settings(settings_message) => {
+                if let Screen::Settings(settings) = &mut self.screen {
+                    let action = settings.update(settings_message);
+
+                    match action {
+                        settings::Action::None => Task::none(),
+                        settings::Action::Run(task) => task.map(Message::Settings),
+                    }
+                } else {
+                    Task::none()
+                }
+            }
+            Message::Loaded {
+                last_chat,
+                system,
+                config,
+            } => {
                 let backend = assistant::Backend::detect(&system.graphics_adapter);
                 self.system = Some(*system);
+
+                match config {
+                    Ok(config) => {
+                        self.config = config;
+                    }
+                    Err(error) => {
+                        log::error!("Failed to load configuration: {error}");
+                    }
+                }
 
                 match last_chat {
                     Ok(last_chat) => {
@@ -249,6 +285,7 @@ impl Icebreaker {
             Screen::Conversation(conversation) => {
                 conversation.view(&self.theme()).map(Message::Conversation)
             }
+            Screen::Settings(settings) => settings.view().map(Message::Settings),
         };
 
         row![sidebar, container(screen).padding(10)].into()
@@ -263,6 +300,7 @@ impl Icebreaker {
             Screen::Conversation(conversation) => {
                 conversation.subscription().map(Message::Conversation)
             }
+            Screen::Settings(_) => Subscription::none(),
         };
 
         let hotkeys = keyboard::on_key_press(|key, _modifiers| match key {
