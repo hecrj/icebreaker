@@ -55,6 +55,7 @@ enum Message {
     Settings(settings::Message),
     Chats,
     Discover,
+    GoToSettings,
 }
 
 impl Icebreaker {
@@ -96,9 +97,13 @@ impl Icebreaker {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::GoToSettings => {
+                self.screen = Screen::Settings(settings::Settings::new(&self.config));
+                Task::none()
+            }
             Message::Settings(settings_message) => {
                 if let Screen::Settings(settings) = &mut self.screen {
-                    let action = settings.update(settings_message);
+                    let action = settings.update(&mut self.config, settings_message);
 
                     match action {
                         settings::Action::None => Task::none(),
@@ -262,6 +267,11 @@ impl Icebreaker {
                     matches!(self.screen, Screen::Search(_)),
                     Some(Message::Discover),
                 ),
+                tab(
+                    icon::cog(),
+                    matches!(self.screen, Screen::Settings(_)),
+                    Some(Message::GoToSettings),
+                ).width(iced::Length::Fixed(50.0)),
             ])
             .style(|theme| {
                 container::Style::default()
