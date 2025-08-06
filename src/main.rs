@@ -344,6 +344,7 @@ impl Icebreaker {
 
         Task::batch([
             Task::perform(
+                #[allow(clippy::unnecessary_to_owned)]
                 model::Library::scan(self.config.model_dir.to_owned()),
                 Message::Scanned,
             ),

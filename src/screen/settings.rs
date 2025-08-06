@@ -72,8 +72,8 @@ impl Settings {
                     log::info!("Configuration saved successfully.");
                     Action::None
                 }
-                Err(e) => {
-                    log::error!("Failed to save configuration: {}", e);
+                Err(error) => {
+                    log::error!("Failed to save configuration: {error}");
                     Action::None
                 }
             },
@@ -116,7 +116,8 @@ impl Settings {
             row![
                 text_input("model dir", &self.model_dir).on_input(Message::ManualTextChange),
                 button(folder_open()).on_press(Message::SetDirWithRFD)
-            ].spacing(5)
+            ]
+            .spacing(5)
         ];
 
         container(set_model_dir).into()

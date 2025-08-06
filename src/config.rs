@@ -24,7 +24,6 @@ impl From<std::io::Error> for Error {
     }
 }
 
-
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Config {
     #[serde(default = "default_model_dir")]
@@ -39,14 +38,15 @@ impl Config {
             let config: Config = ron::de::from_str(&file)?;
             Ok(config)
         } else {
-            return Err(Error::PathNotFound);
+            Err(Error::PathNotFound)
         }
     }
 
     pub async fn save(&self) -> Result<(), Error> {
         let path = CONFIG_DIR.join("config.ron");
         let serialized = ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default())?;
-        tokio::fs::create_dir_all(CONFIG_DIR.parent().expect("Failed to get parent directory")).await?;
+        tokio::fs::create_dir_all(CONFIG_DIR.parent().expect("Failed to get parent directory"))
+            .await?;
         tokio::fs::write(path, serialized).await?;
         Ok(())
     }
@@ -66,4 +66,3 @@ impl Default for Config {
         }
     }
 }
-

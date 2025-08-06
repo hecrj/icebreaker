@@ -101,6 +101,7 @@ impl Conversation {
         model_dir: impl AsRef<std::path::Path>,
     ) -> (Self, Task<Message>) {
         let (boot, handle) = Task::sip(
+            #[allow(clippy::unnecessary_to_owned)]
             Assistant::boot(file.clone(), backend, model_dir.as_ref().to_owned()),
             Message::Booting,
             Message::Booted,
@@ -135,7 +136,11 @@ impl Conversation {
         )
     }
 
-    pub fn open(chat: Chat, backend: Backend, model_dir: impl AsRef<std::path::Path>) -> (Self, Task<Message>) {
+    pub fn open(
+        chat: Chat,
+        backend: Backend,
+        model_dir: impl AsRef<std::path::Path>,
+    ) -> (Self, Task<Message>) {
         let (conversation, task) = Self::new(chat.file, backend, model_dir);
 
         (
@@ -393,7 +398,8 @@ impl Conversation {
                         Action::None
                     }
                     _ => {
-                        let (mut conversation, task) = Self::open(chat, self.backend, &self.model_dir);
+                        let (mut conversation, task) =
+                            Self::open(chat, self.backend, &self.model_dir);
                         conversation.input_height = self.input_height;
 
                         *self = conversation;
