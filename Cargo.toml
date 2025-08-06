@@ -16,6 +16,10 @@ open.workspace = true
 rand.workspace = true
 tokio.workspace = true
 tracing-subscriber.workspace = true
+dirs.workspace = true
+serde = { workspace = true, features = ["derive"] }
+ron.workspace = true
+thiserror.workspace = true
 
 iced.workspace = true
 iced.features = ["tokio", "sipper", "svg", "markdown", "highlighter", "system", "crisp", "debug"]
@@ -51,12 +55,13 @@ scraper = "0.22"
 serde = "1.0"
 serde_json = "1.0"
 sipper = "0.1"
-thiserror = "1.0"
+thiserror = "2.0"
 tokio = "1.38"
 tokio-stream = "0.1"
 tracing-subscriber = "0.3"
 url = "2.5"
 uuid = "1.10"
+ron = "0.10.1"
 
 [workspace.lints.rust]
 rust_2018_idioms = { level = "deny", priority = -1 }
