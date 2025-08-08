@@ -1,3 +1,5 @@
+pub mod sidebar;
+
 pub use iced_palace::widget::diffused_text;
 
 pub mod tip {
@@ -148,27 +150,6 @@ pub fn about<'a>() -> Element<'a, Link> {
         llama_cpp,
     ]
     .spacing(7)
-    .align_y(Center)
-    .into()
-}
-
-pub fn sidebar_section<'a, Message: Clone + 'a>(
-    title: impl text::IntoFragment<'a>,
-    icon: Text<'a>,
-    on_icon_press: Message,
-) -> Element<'a, Message> {
-    row![
-        text(title).width(Fill).font(Font::MONOSPACE),
-        button(icon.line_height(1.0))
-            .on_press(on_icon_press)
-            .padding([8, 10])
-            .style(|theme, status| {
-                button::Style {
-                    border: border::rounded(5),
-                    ..button::subtle(theme, status)
-                }
-            })
-    ]
     .align_y(Center)
     .into()
 }

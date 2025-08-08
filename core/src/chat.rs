@@ -1,6 +1,7 @@
 mod schema;
 
 use crate::assistant::{self, Assistant, Reply, Token};
+use crate::directory;
 use crate::model;
 use crate::plan::{self, Plan};
 use crate::Error;
@@ -339,10 +340,7 @@ impl LastOpened {
 }
 
 async fn storage_dir() -> Result<PathBuf, io::Error> {
-    let directory = dirs::data_local_dir()
-        .unwrap_or(PathBuf::from("."))
-        .join("icebreaker")
-        .join("chats");
+    let directory = directory::data().join("chats");
 
     fs::create_dir_all(&directory).await?;
 

@@ -1,7 +1,7 @@
 use crate::core::model;
 use crate::core::{Error, Model};
 use crate::icon;
-use crate::widget::sidebar_section;
+use crate::widget::sidebar;
 
 use iced::border;
 use iced::font;
@@ -67,10 +67,10 @@ impl Search {
         )
     }
 
-    pub fn title(&self) -> String {
+    pub fn title(&self) -> &str {
         match &self.mode {
-            Mode::Search => "Models - Icebreaker".to_owned(),
-            Mode::Details { model, .. } => format!("{} - Icebreaker", model.name()),
+            Mode::Search => "Models",
+            Mode::Details { model, .. } => model.name(),
         }
     }
 
@@ -177,7 +177,15 @@ impl Search {
         let search = text_input("Search language models...", &self.search)
             .size(20)
             .padding(10)
-            .on_input(Message::SearchChanged);
+            .on_input(Message::SearchChanged)
+            .style(|theme, status| {
+                let style = text_input::default(theme, status);
+
+                text_input::Style {
+                    border: style.border.rounded(5),
+                    ..style
+                }
+            });
 
         let models: Element<'_, _> = {
             let search_terms: Vec<_> = self
@@ -236,11 +244,7 @@ impl Search {
         fn badge<'a>(icon: Text<'a>, value: Text<'a>) -> Element<'a, Message> {
             container(
                 row![
-                    icon.size(10)
-                        .style(|theme| text::Style {
-                            color: Some(theme.extended_palette().background.strongest.color)
-                        })
-                        .line_height(1.0),
+                    icon.size(10).style(text::secondary).line_height(1.0),
                     value.size(12).font(Font::MONOSPACE)
                 ]
                 .align_y(Center)
@@ -302,7 +306,7 @@ impl Search {
     }
 
     pub fn sidebar<'a>(&'a self, library: &'a model::Library) -> Element<'a, Message> {
-        let header = sidebar_section("Models", icon::search(), Message::Back);
+        let header = sidebar::header("Models", Some((icon::search(), Message::Back)));
 
         if library.files().is_empty() {
             return column![
@@ -353,28 +357,7 @@ impl Search {
                 _ => false,
             };
 
-            button(entry)
-                .on_press_with(|| Message::Select(file.model.clone()))
-                .padding([8, 10])
-                .style(move |theme, status| {
-                    let base = button::Style {
-                        border: border::rounded(5),
-                        ..button::subtle(theme, status)
-                    };
-
-                    if is_active && status == button::Status::Active {
-                        let background = theme.extended_palette().background.weak;
-
-                        button::Style {
-                            background: Some(background.color.into()),
-                            text_color: background.text,
-                            ..base
-                        }
-                    } else {
-                        base
-                    }
-                })
-                .into()
+            sidebar::item(entry, is_active, || Message::Select(file.model.clone()))
         }));
 
         column![header, scrollable(library).spacing(10).height(Fill)]
@@ -425,7 +408,7 @@ fn model_card(model: &Model) -> Element<'_, Message> {
             let base = button::Style {
                 background: Some(palette.background.weakest.color.into()),
                 text_color: palette.background.weakest.text,
-                border: border::rounded(2)
+                border: border::rounded(5)
                     .color(palette.background.weak.color)
                     .width(1),
                 ..button::Style::default()

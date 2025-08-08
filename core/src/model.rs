@@ -1,13 +1,15 @@
+use crate::directory;
 use crate::request;
 use crate::Error;
 
+use decoder::{decode, encode, Value};
 use serde::{Deserialize, Serialize};
 use sipper::{sipper, Sipper, Straw};
 use tokio::fs;
 
 use std::collections::BTreeMap;
 use std::fmt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 const HF_URL: &str = "https://huggingface.co";
 const API_URL: &str = "https://huggingface.co/api";
@@ -237,6 +239,48 @@ impl File {
         Ok(files)
     }
 
+    pub fn download<'a>(
+        &'a self,
+        directory: &'a Directory,
+    ) -> impl Straw<PathBuf, request::Progress, Error> + 'a {
+        sipper(async move |sender| {
+            let old_path = Directory::old().0.join(&self.name);
+            let directory = directory.0.join(&self.model.0);
+            let model_path = directory.join(&self.name);
+
+            fs::create_dir_all(&directory).await?;
+
+            if fs::try_exists(&model_path).await? {
+                let file_metadata = fs::metadata(&model_path).await?;
+
+                if self.size.is_none_or(|size| size == file_metadata.len()) {
+                    return Ok(model_path);
+                }
+
+                fs::remove_file(&model_path).await?;
+            }
+
+            if fs::copy(&old_path, &model_path).await.is_ok() {
+                let _ = fs::remove_file(old_path).await;
+                return Ok(model_path);
+            }
+
+            let url = format!(
+                "{}/{id}/resolve/main/{filename}?download=true",
+                HF_URL,
+                id = self.model.0,
+                filename = self.name
+            );
+
+            let temp_path = model_path.with_extension("tmp");
+
+            request::download_file(url, &temp_path).run(sender).await?;
+            fs::rename(temp_path, &model_path).await?;
+
+            Ok(model_path)
+        })
+    }
+
     pub fn decode(value: decoder::Value) -> decoder::Result<Self> {
         use decoder::decode::{map, string, u64};
 
@@ -327,17 +371,17 @@ impl Readme {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Library {
+    directory: Directory,
     files: Vec<File>,
 }
 
 impl Library {
-    pub async fn scan() -> Result<Self, Error> {
+    pub async fn scan(directory: impl AsRef<Path>) -> Result<Self, Error> {
         let mut files = Vec::new();
+        let directory = directory.as_ref();
+        let mut list = fs::read_dir(directory).await?;
 
-        let path = Self::path().await;
-        let mut directory = fs::read_dir(path).await?;
-
-        while let Some(author) = directory.next_entry().await? {
+        while let Some(author) = list.next_entry().await? {
             if !author.file_type().await?.is_dir() {
                 continue;
             }
@@ -371,55 +415,50 @@ impl Library {
             }
         }
 
-        Ok(Self { files })
+        Ok(Self {
+            directory: Directory(directory.to_path_buf()),
+            files,
+        })
+    }
+
+    pub fn directory(&self) -> &Directory {
+        &self.directory
     }
 
     pub fn files(&self) -> &[File] {
         &self.files
     }
+}
 
-    pub async fn path() -> PathBuf {
-        // TODO: Configurable
-        PathBuf::from("./models")
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Directory(PathBuf);
+
+impl Directory {
+    pub fn decode(value: Value) -> decoder::Result<Self> {
+        decode::string(value).map(PathBuf::from).map(Self)
     }
 
-    pub fn download(file: File) -> impl Straw<PathBuf, request::Progress, Error> {
-        sipper(async move |sender| {
-            let library = Self::path().await;
-            let old_path = library.join(&file.name);
-            let directory = library.join(&file.model.0);
-            let model_path = directory.join(&file.name);
+    pub fn encode(&self) -> Value {
+        encode::string(self.0.to_string_lossy())
+    }
 
-            fs::create_dir_all(&directory).await?;
+    pub fn path(&self) -> &Path {
+        &self.0
+    }
 
-            if fs::try_exists(&model_path).await? {
-                let file_metadata = fs::metadata(&model_path).await?;
+    fn old() -> Self {
+        Directory(PathBuf::from("./models"))
+    }
+}
 
-                if file.size.is_none_or(|size| size == file_metadata.len()) {
-                    return Ok(model_path);
-                }
+impl Default for Directory {
+    fn default() -> Self {
+        Self(directory::data().join("models"))
+    }
+}
 
-                fs::remove_file(&model_path).await?;
-            }
-
-            if fs::copy(&old_path, &model_path).await.is_ok() {
-                let _ = fs::remove_file(old_path).await;
-                return Ok(model_path);
-            }
-
-            let url = format!(
-                "{}/{id}/resolve/main/{filename}?download=true",
-                HF_URL,
-                id = file.model.0,
-                filename = file.name
-            );
-
-            let temp_path = model_path.with_extension("tmp");
-
-            request::download_file(url, &temp_path).run(sender).await?;
-            fs::rename(temp_path, &model_path).await?;
-
-            Ok(model_path)
-        })
+impl AsRef<Path> for Directory {
+    fn as_ref(&self) -> &Path {
+        &self.0
     }
 }

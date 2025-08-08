@@ -1,6 +1,6 @@
 // Generated automatically by iced_fontello at build time.
 // Do not edit manually. Source: ../fonts/icebreaker-icons.toml
-// 142772a4c1ccedab0baec3a6af418d859fa5b32db9c124b91a1601e0051f1127
+// ba8ea74725fafb80ed416656b302e1e51535dbe4da1a4567b843de6b23280257
 use iced::widget::{text, Text};
 use iced::Font;
 
@@ -34,12 +34,24 @@ pub fn clock<'a>() -> Text<'a> {
     icon("\u{1F554}")
 }
 
+pub fn cog<'a>() -> Text<'a> {
+    icon("\u{2699}")
+}
+
 pub fn cubes<'a>() -> Text<'a> {
     icon("\u{F1B3}")
 }
 
 pub fn download<'a>() -> Text<'a> {
     icon("\u{1F4E5}")
+}
+
+pub fn folder<'a>() -> Text<'a> {
+    icon("\u{1F4C1}")
+}
+
+pub fn folder_open<'a>() -> Text<'a> {
+    icon("\u{1F4C2}")
 }
 
 pub fn globe<'a>() -> Text<'a> {
@@ -52,6 +64,10 @@ pub fn left<'a>() -> Text<'a> {
 
 pub fn link<'a>() -> Text<'a> {
     icon("\u{F08E}")
+}
+
+pub fn palette<'a>() -> Text<'a> {
+    icon("\u{1F3A8}")
 }
 
 pub fn plus<'a>() -> Text<'a> {
