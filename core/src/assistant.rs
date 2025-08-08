@@ -24,7 +24,11 @@ impl Assistant {
 
     const HOST_PORT: u64 = 8080;
 
-    pub fn boot(file: model::File, backend: Backend) -> impl Straw<Self, BootEvent, Error> {
+    pub fn boot(
+        directory: model::Directory,
+        file: model::File,
+        backend: Backend,
+    ) -> impl Straw<Self, BootEvent, Error> {
         use tokio::io::{self, AsyncBufReadExt};
         use tokio::process;
         use tokio::task;
@@ -46,7 +50,7 @@ impl Assistant {
         sipper(move |sender| async move {
             let mut sender = Sender(sender);
 
-            let mut download = model::Library::download(file.clone()).pin();
+            let mut download = file.download(&directory).pin();
             let mut last_percent = None;
 
             while let Some(progress) = download.sip().await {
@@ -119,8 +123,6 @@ impl Assistant {
 
                 sender.progress("Preparing container...", 0).await;
 
-                let library = model::Library::path().await;
-
                 let command = match backend {
                     Backend::Cpu => {
                         format!(
@@ -130,7 +132,7 @@ impl Assistant {
                             filename = file.relative_path().display(),
                             container = Self::LLAMA_CPP_CONTAINER_CPU,
                             port = Self::HOST_PORT,
-                            volume = library.display(),
+                            volume = directory.path().display(),
                         )
                     }
                     Backend::Cuda => {
@@ -141,7 +143,7 @@ impl Assistant {
                             filename = file.relative_path().display(),
                             container = Self::LLAMA_CPP_CONTAINER_CUDA,
                             port = Self::HOST_PORT,
-                            volume = library.display(),
+                            volume = directory.path().display(),
                         )
                     }
                     Backend::Rocm => {
@@ -154,7 +156,7 @@ impl Assistant {
                             filename = file.relative_path().display(),
                             container = Self::LLAMA_CPP_CONTAINER_ROCM,
                             port = Self::HOST_PORT,
-                            volume = library.display(),
+                            volume = directory.path().display(),
                         )
                     }
                 };
@@ -239,6 +241,7 @@ impl Assistant {
                 async move {
                     while let Some(line) = lines.next().await {
                         if let Ok(log) = line {
+                            log::debug!("{log}");
                             sender.log(log).await;
                         }
                     }

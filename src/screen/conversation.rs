@@ -1,14 +1,13 @@
 use crate::core::assistant::{Assistant, Backend, BootEvent};
 use crate::core::chat::{self, Chat, Entry, Id, Strategy};
-use crate::core::model::File;
+use crate::core::model::{File, Library};
 use crate::core::Error;
 use crate::icon;
 use crate::ui::markdown;
 use crate::ui::plan;
 use crate::ui::{Markdown, Plan, Reply};
-use crate::widget::{copy, regenerate, sidebar_section, tip, toggle};
+use crate::widget::{copy, regenerate, sidebar, tip, toggle};
 
-use iced::border;
 use iced::clipboard;
 use iced::gradient;
 use iced::padding;
@@ -92,9 +91,9 @@ pub enum Action {
 }
 
 impl Conversation {
-    pub fn new(file: File, backend: Backend) -> (Self, Task<Message>) {
+    pub fn new(library: &Library, file: File, backend: Backend) -> (Self, Task<Message>) {
         let (boot, handle) = Task::sip(
-            Assistant::boot(file.clone(), backend),
+            Assistant::boot(library.directory().clone(), file.clone(), backend),
             Message::Booting,
             Message::Booted,
         )
@@ -127,8 +126,8 @@ impl Conversation {
         )
     }
 
-    pub fn open(chat: Chat, backend: Backend) -> (Self, Task<Message>) {
-        let (conversation, task) = Self::new(chat.file, backend);
+    pub fn open(library: &Library, chat: Chat, backend: Backend) -> (Self, Task<Message>) {
+        let (conversation, task) = Self::new(library, chat.file, backend);
 
         (
             Self {
@@ -141,14 +140,11 @@ impl Conversation {
         )
     }
 
-    pub fn title(&self) -> String {
-        format!(
-            "{name} - Icebreaker",
-            name = self.title.as_deref().unwrap_or(self.model_name())
-        )
+    pub fn title(&self) -> &str {
+        self.title.as_deref().unwrap_or(self.model_name())
     }
 
-    pub fn update(&mut self, message: Message) -> Action {
+    pub fn update(&mut self, library: &Library, message: Message) -> Action {
         match message {
             Message::ChatsListed(Ok(chats)) => {
                 self.chats = chats;
@@ -385,7 +381,7 @@ impl Conversation {
                         Action::None
                     }
                     _ => {
-                        let (mut conversation, task) = Self::open(chat, self.backend);
+                        let (mut conversation, task) = Self::open(library, chat, self.backend);
                         conversation.input_height = self.input_height;
 
                         *self = conversation;
@@ -717,7 +713,7 @@ impl Conversation {
     }
 
     pub fn sidebar(&self) -> Element<'_, Message> {
-        let header = sidebar_section("Chats", icon::plus(), Message::New);
+        let header = sidebar::header("Chats", Some((icon::plus(), Message::New)));
 
         let chats = column(self.chats.iter().map(|chat| {
             let card = match &chat.title {
@@ -728,29 +724,7 @@ impl Conversation {
 
             let is_active = Some(&chat.id) == self.id.as_ref();
 
-            button(card)
-                .on_press_with(move || Message::Open(chat.id))
-                .padding([8, 10])
-                .width(Fill)
-                .style(move |theme, status| {
-                    let base = button::Style {
-                        border: border::rounded(5),
-                        ..button::subtle(theme, status)
-                    };
-
-                    if is_active && status == button::Status::Active {
-                        let background = theme.extended_palette().background.weak;
-
-                        button::Style {
-                            background: Some(background.color.into()),
-                            text_color: background.text,
-                            ..base
-                        }
-                    } else {
-                        base
-                    }
-                })
-                .into()
+            sidebar::item(card, is_active, move || Message::Open(chat.id))
         }))
         .clip(true);
 

@@ -3,6 +3,9 @@ name = "icebreaker_core"
 version = "0.1.0"
 edition = "2021"
 
+[lints]
+workspace = true
+
 [dependencies]
 chrono.workspace = true
 chrono.features = ["serde"]
@@ -26,14 +29,12 @@ uuid.workspace = true
 uuid.features = ["v4", "serde"]
 
 decoder.workspace = true
+directories.workspace = true
 function.workspace = true
 futures.workspace = true
-serde_json.workspace = true
-scraper.workspace = true
-dirs.workspace = true
-thiserror.workspace = true
 log.workspace = true
+scraper.workspace = true
+serde_json.workspace = true
 sipper.workspace = true
-
-[lints]
-workspace = true
+thiserror.workspace = true
+toml.workspace = true
