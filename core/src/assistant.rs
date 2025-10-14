@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 #[derive(Debug, Clone)]
 pub struct Assistant {
     file: model::File,
-    _server: Arc<Server>,
+    _instance: Arc<llama_server::Instance>,
 }
 
 impl Assistant {
@@ -202,9 +202,7 @@ impl Assistant {
 
             Ok(Self {
                 file,
-                _server: Arc::new(Server {
-                    _instance: instance,
-                }),
+                _instance: Arc::new(instance),
             })
         })
     }
@@ -451,11 +449,6 @@ pub struct Reasoning {
 pub enum Token {
     Reasoning(String),
     Talking(String),
-}
-
-#[derive(Debug)]
-struct Server {
-    _instance: llama_server::Instance,
 }
 
 #[derive(Debug, Clone)]
