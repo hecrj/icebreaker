@@ -196,9 +196,9 @@ impl Assistant {
                 .boxed()
             };
 
-            let _log_handle = task::spawn(log_output);
-
+            let log_handle = task::spawn(log_output);
             instance.wait_until_ready().await?;
+            log_handle.abort();
 
             Ok(Self {
                 file,
