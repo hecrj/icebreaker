@@ -7,6 +7,18 @@ edition = "2021"
 workspace = true
 
 [dependencies]
+decoder.workspace = true
+directories.workspace = true
+function.workspace = true
+futures.workspace = true
+llama-server.workspace = true
+log.workspace = true
+scraper.workspace = true
+serde_json.workspace = true
+sipper.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+
 chrono.workspace = true
 chrono.features = ["serde"]
 
@@ -27,14 +39,3 @@ url.features = ["serde"]
 
 uuid.workspace = true
 uuid.features = ["v4", "serde"]
-
-decoder.workspace = true
-directories.workspace = true
-function.workspace = true
-futures.workspace = true
-log.workspace = true
-scraper.workspace = true
-serde_json.workspace = true
-sipper.workspace = true
-thiserror.workspace = true
-toml.workspace = true

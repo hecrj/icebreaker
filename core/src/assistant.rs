@@ -4,10 +4,8 @@ use crate::Error;
 use serde::Deserialize;
 use serde_json::json;
 use sipper::{sipper, FutureExt, Sipper, Straw, StreamExt};
-use tokio::process;
 
-use std::env;
-use std::path::Path;
+use std::process::Stdio;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -18,11 +16,7 @@ pub struct Assistant {
 }
 
 impl Assistant {
-    const LLAMA_CPP_CONTAINER_CPU: &'static str = "ghcr.io/ggerganov/llama.cpp:server-b4600";
-    const LLAMA_CPP_CONTAINER_CUDA: &'static str = "ghcr.io/ggerganov/llama.cpp:server-cuda-b4600";
-    const LLAMA_CPP_CONTAINER_ROCM: &'static str = "ghcr.io/hecrj/icebreaker:server-rocm-b4600";
-
-    const HOST_PORT: u64 = 8080;
+    const HOST_PORT: u32 = 8080;
 
     pub fn boot(
         directory: model::Directory,
@@ -30,9 +24,7 @@ impl Assistant {
         backend: Backend,
     ) -> impl Straw<Self, BootEvent, Error> {
         use tokio::io::{self, AsyncBufReadExt};
-        use tokio::process;
         use tokio::task;
-        use tokio::time;
 
         #[derive(Clone)]
         struct Sender(sipper::Sender<BootEvent>);
@@ -42,182 +34,135 @@ impl Assistant {
                 let _ = self.0.send(BootEvent::Logged(log)).await;
             }
 
-            async fn progress(&mut self, stage: &'static str, percent: u32) {
-                let _ = self.0.send(BootEvent::Progressed { stage, percent }).await;
+            async fn log_download(
+                &mut self,
+                downloaded: u64,
+                total: u64,
+                speed: u64,
+                percent: u32,
+            ) {
+                self.log(format!(
+                    "=> {percent}% {downloaded:.2}GB of {total:.2}GB \
+                                    @ {speed:.2} MB/s",
+                    downloaded = downloaded as f32 / 10f32.powi(9),
+                    total = total as f32 / 10f32.powi(9),
+                    speed = speed as f32 / 10f32.powi(6),
+                ))
+                .await;
+            }
+
+            async fn progress(&mut self, stage: impl Into<String>, percent: u32) {
+                let _ = self
+                    .0
+                    .send(BootEvent::Progressed {
+                        stage: stage.into(),
+                        percent,
+                    })
+                    .await;
             }
         }
 
         sipper(move |sender| async move {
             let mut sender = Sender(sender);
 
-            let mut download = file.download(&directory).pin();
+            let builds = llama_server::Server::list().await?;
+
+            let build = if let Some(latest) = builds.last() {
+                *latest
+            } else {
+                llama_server::Build::latest()
+                    .await
+                    .ok()
+                    .unwrap_or(llama_server::Build::locked(6756))
+            };
+
+            let mut server = llama_server::Server::download(
+                build,
+                match backend {
+                    Backend::Cpu => llama_server::backend::Set::empty(),
+                    Backend::Cuda => llama_server::backend::Set::CUDA,
+                    Backend::Rocm => llama_server::backend::Set::HIP,
+                },
+            )
+            .pin();
+
             let mut last_percent = None;
 
-            while let Some(progress) = download.sip().await {
-                if let Some((total, percent)) = progress.percent() {
-                    sender.progress("Downloading model...", percent).await;
+            while let Some(stage) = server.sip().await {
+                match stage {
+                    llama_server::Stage::Downloading(artifact, progress) => {
+                        let percent =
+                            ((progress.downloaded as f32 / progress.total as f32) * 100.0) as u32;
 
-                    if Some(percent) != last_percent {
-                        last_percent = Some(percent);
+                        if last_percent == Some(percent) {
+                            continue;
+                        }
+
+                        let component = match artifact {
+                            llama_server::Artifact::Server => "llama-server",
+                            llama_server::Artifact::Backend(backend) => match backend {
+                                llama_server::Backend::Cuda => "CUDA backend",
+                                llama_server::Backend::Hip => "ROCm backend",
+                            },
+                        };
 
                         sender
-                            .log(format!(
-                                "=> {percent}% {downloaded:.2}GB of {total:.2}GB \
-                                    @ {speed:.2} MB/s",
-                                downloaded = progress.downloaded as f32 / 10f32.powi(9),
-                                total = total as f32 / 10f32.powi(9),
-                                speed = progress.speed as f32 / 10f32.powi(6),
-                            ))
+                            .progress(format!("Downloading {component}..."), percent)
                             .await;
+
+                        sender
+                            .log_download(
+                                progress.downloaded,
+                                progress.total,
+                                progress.speed,
+                                percent,
+                            )
+                            .await;
+
+                        last_percent = Some(percent);
                     }
                 }
             }
 
-            let model_path = download.await?;
+            let server = server.await?;
+            let mut model = file.download(&directory).pin();
 
-            sender.progress("Detecting executor...", 0).await;
+            while let Some(progress) = model.sip().await {
+                if let Some((total, percent)) = progress.percent() {
+                    if last_percent == Some(percent) {
+                        continue;
+                    }
 
-            let (server, stdout, stderr) = if let Ok(version) =
-                process::Command::new("llama-server")
-                    .arg("--version")
-                    .output()
-                    .await
-            {
-                sender
-                    .log("Local llama-server binary found!".to_owned())
-                    .await;
+                    sender.progress("Downloading model...", percent).await;
 
-                let mut lines = version.stdout.lines();
+                    sender
+                        .log_download(progress.downloaded, total, progress.speed, percent)
+                        .await;
 
-                while let Some(line) = lines.next_line().await? {
-                    sender.log(line).await;
+                    last_percent = Some(percent);
                 }
+            }
 
-                sender.progress("Launching assistant...", 99).await;
+            let model_path = model.await?;
 
-                sender
-                    .log(format!(
-                        "Launching {model} with local llama-server...",
-                        model = file.model.name(),
-                    ))
-                    .await;
+            sender.progress("Loading model...", 99).await;
 
-                let mut server =
-                    Server::launch_with_executable("llama-server", &model_path, backend)?;
+            let mut instance = server
+                .boot(
+                    model_path,
+                    llama_server::Settings {
+                        host: String::from("127.0.0.1"),
+                        port: Self::HOST_PORT,
+                        gpu_layers: 80,
+                        stdin: Stdio::null(),
+                        stdout: Stdio::piped(),
+                        stderr: Stdio::piped(),
+                    },
+                )
+                .await?;
 
-                let stdout = server.stdout.take();
-                let stderr = server.stderr.take();
-
-                (Server::Process(server), stdout, stderr)
-            } else if let Ok(_docker) = process::Command::new("docker")
-                .arg("version")
-                .output()
-                .await
-            {
-                sender
-                    .log(format!(
-                        "Launching {model} with Docker...",
-                        model = file.model.name(),
-                    ))
-                    .await;
-
-                sender.progress("Preparing container...", 0).await;
-
-                let command = match backend {
-                    Backend::Cpu => {
-                        format!(
-                            "create --rm -p {port}:80 -v {volume}:/models \
-                            {container} --model /models/{filename} \
-                            --port 80 --host 0.0.0.0",
-                            filename = file.relative_path().display(),
-                            container = Self::LLAMA_CPP_CONTAINER_CPU,
-                            port = Self::HOST_PORT,
-                            volume = directory.path().display(),
-                        )
-                    }
-                    Backend::Cuda => {
-                        format!(
-                            "create --rm --gpus all -p {port}:80 -v {volume}:/models \
-                            {container} --model /models/{filename} \
-                            --port 80 --host 0.0.0.0 --gpu-layers 40",
-                            filename = file.relative_path().display(),
-                            container = Self::LLAMA_CPP_CONTAINER_CUDA,
-                            port = Self::HOST_PORT,
-                            volume = directory.path().display(),
-                        )
-                    }
-                    Backend::Rocm => {
-                        format!(
-                            "create --rm -p {port}:80 -v {volume}:/models \
-                            --device=/dev/kfd --device=/dev/dri \
-                            --security-opt seccomp=unconfined --group-add video \
-                            {container} --model /models/{filename} \
-                            --port 80 --host 0.0.0.0 --gpu-layers 40",
-                            filename = file.relative_path().display(),
-                            container = Self::LLAMA_CPP_CONTAINER_ROCM,
-                            port = Self::HOST_PORT,
-                            volume = directory.path().display(),
-                        )
-                    }
-                };
-
-                let mut docker = process::Command::new("docker")
-                    .args(Server::parse_args(&command))
-                    .kill_on_drop(true)
-                    .stdout(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::piped())
-                    .spawn()?;
-
-                let notify_progress = {
-                    let mut sender = sender.clone();
-
-                    let output = io::BufReader::new(docker.stderr.take().expect("piped stderr"));
-
-                    async move {
-                        let mut lines = output.lines();
-
-                        while let Ok(Some(log)) = lines.next_line().await {
-                            sender.log(log).await;
-                        }
-                    }
-                };
-
-                let _handle = task::spawn(notify_progress);
-
-                let container = {
-                    let output = io::BufReader::new(docker.stdout.take().expect("piped stdout"));
-
-                    let mut lines = output.lines();
-
-                    lines
-                        .next_line()
-                        .await?
-                        .ok_or_else(|| Error::DockerFailed("no container id returned by docker"))?
-                };
-
-                if !docker.wait().await?.success() {
-                    return Err(Error::DockerFailed("failed to create container"));
-                }
-
-                sender.progress("Launching assistant...", 99).await;
-
-                let server = Server::Container(container.clone());
-
-                let _start = process::Command::new("docker")
-                    .args(["start", &container])
-                    .output()
-                    .await?;
-
-                let mut logs = process::Command::new("docker")
-                    .args(["logs", "-f", &container])
-                    .stdout(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::piped())
-                    .spawn()?;
-
-                (server, logs.stdout.take(), logs.stderr.take())
-            } else {
-                return Err(Error::NoExecutorAvailable);
-            };
+            let stdout = instance.process.stdout.take();
+            let stderr = instance.process.stderr.take();
 
             let log_output = {
                 let mut sender = sender.clone();
@@ -251,36 +196,16 @@ impl Assistant {
                 .boxed()
             };
 
-            let check_health = async move {
-                loop {
-                    time::sleep(Duration::from_secs(1)).await;
+            let _log_handle = task::spawn(log_output);
 
-                    if let Ok(response) = reqwest::get(format!(
-                        "http://localhost:{port}/health",
-                        port = Self::HOST_PORT
-                    ))
-                    .await
-                    {
-                        if response.error_for_status().is_ok() {
-                            return true;
-                        }
-                    }
-                }
-            }
-            .boxed();
+            instance.wait_until_ready().await?;
 
-            let log_handle = task::spawn(log_output);
-
-            if check_health.await {
-                log_handle.abort();
-
-                return Ok(Self {
-                    file,
-                    _server: Arc::new(server),
-                });
-            }
-
-            Err(Error::ExecutorFailed("llama-server exited unexpectedly"))
+            Ok(Self {
+                file,
+                _server: Arc::new(Server {
+                    _instance: instance,
+                }),
+            })
         })
     }
 
@@ -529,65 +454,12 @@ pub enum Token {
 }
 
 #[derive(Debug)]
-enum Server {
-    Container(String),
-    Process(process::Child),
-}
-
-impl Server {
-    fn launch_with_executable(
-        executable: &'static str,
-        file: &Path,
-        backend: Backend,
-    ) -> Result<process::Child, Error> {
-        let gpu_flags = match backend {
-            Backend::Cpu => "",
-            Backend::Cuda | Backend::Rocm => "--gpu-layers 80",
-        };
-
-        let custom_args = env::var("ICEBREAKER_LLAMA_CPP_ARGS").unwrap_or_default();
-
-        let server = process::Command::new(executable)
-            .args(Self::parse_args(&format!(
-                "--model {file} --port 8080 --host 0.0.0.0 {gpu_flags} {custom_args}",
-                file = file.display(),
-            )))
-            .kill_on_drop(true)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()?;
-
-        Ok(server)
-    }
-
-    fn parse_args(command: &str) -> impl Iterator<Item = &str> {
-        command
-            .split(' ')
-            .map(str::trim)
-            .filter(|arg| !arg.is_empty())
-    }
-}
-
-impl Drop for Server {
-    fn drop(&mut self) {
-        use std::process;
-
-        match self {
-            Self::Container(id) => {
-                let _ = process::Command::new("docker")
-                    .args(["stop", id])
-                    .stdin(process::Stdio::null())
-                    .stdout(process::Stdio::null())
-                    .stderr(process::Stdio::null())
-                    .spawn();
-            }
-            Self::Process(_process) => {}
-        }
-    }
+struct Server {
+    _instance: llama_server::Instance,
 }
 
 #[derive(Debug, Clone)]
 pub enum BootEvent {
-    Progressed { stage: &'static str, percent: u32 },
+    Progressed { stage: String, percent: u32 },
     Logged(String),
 }

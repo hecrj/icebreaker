@@ -27,8 +27,8 @@ pub enum Error {
     IOFailed(Arc<io::Error>),
     #[error("docker operation failed: {0}")]
     DockerFailed(&'static str),
-    #[error("executor failed: {0}")]
-    ExecutorFailed(&'static str),
+    #[error("llama-server failed: {0:?}")]
+    ExecutorFailed(llama_server::Error),
     #[error("JSON deserialization failed: {0}")]
     InvalidJson(Arc<serde_json::Error>),
     #[error("TOML deserialization failed: {0}")]
@@ -82,5 +82,11 @@ impl From<decoder::Error> for Error {
 impl From<task::JoinError> for Error {
     fn from(error: task::JoinError) -> Self {
         Self::JoinFailed(Arc::new(error))
+    }
+}
+
+impl From<llama_server::Error> for Error {
+    fn from(error: llama_server::Error) -> Self {
+        Self::ExecutorFailed(error)
     }
 }
