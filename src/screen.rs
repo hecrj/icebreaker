@@ -6,7 +6,7 @@ pub use conversation::Conversation;
 pub use search::Search;
 pub use settings::Settings;
 
-use iced::widget::horizontal_space;
+use iced::widget::space;
 use iced::Element;
 
 pub enum Screen {
@@ -17,5 +17,5 @@ pub enum Screen {
 }
 
 pub fn loading<'a, Message: 'a>() -> Element<'a, Message> {
-    horizontal_space().into()
+    space().into()
 }

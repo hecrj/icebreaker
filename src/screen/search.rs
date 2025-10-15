@@ -7,8 +7,8 @@ use iced::border;
 use iced::font;
 use iced::time::Duration;
 use iced::widget::{
-    self, button, center, center_x, column, container, grid, horizontal_rule, horizontal_space,
-    right, row, rule, scrollable, text, text_input, value,
+    button, center, center_x, column, container, grid, operation, right, row, rule, scrollable,
+    space, text, text_input, value,
 };
 use iced::{Center, Element, Fill, Font, Right, Shrink, Task, Theme};
 use iced_palace::widget::ellipsized_text;
@@ -62,7 +62,7 @@ impl Search {
             },
             Task::batch([
                 Task::perform(Model::list(), Message::ModelsListed),
-                widget::focus_next(),
+                operation::focus_next(),
             ]),
         )
     }
@@ -151,7 +151,7 @@ impl Search {
             Message::Back => {
                 self.mode = Mode::Search;
 
-                Action::Run(widget::focus_next())
+                Action::Run(operation::focus_next())
             }
             Message::Boot(file) => Action::Boot(file),
             Message::DetailsFetched(_, Err(error)) | Message::FilesListed(_, Err(error)) => {
@@ -346,7 +346,7 @@ impl Search {
 
             let entry = column![
                 title,
-                row![author, horizontal_space(), variant]
+                row![author, space::horizontal(), variant]
                     .spacing(5)
                     .align_y(Center)
             ]
@@ -506,7 +506,7 @@ pub fn view_files<'a>(
         });
 
         column(Itertools::intersperse_with(files, || {
-            horizontal_rule(1).style(rule::weak).into()
+            rule::horizontal(1).style(rule::weak).into()
         }))
         .spacing(10)
         .into()

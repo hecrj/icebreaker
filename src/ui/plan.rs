@@ -10,9 +10,7 @@ use crate::widget::diffused_text;
 use iced::border;
 use iced::theme;
 use iced::time::seconds;
-use iced::widget::{
-    button, center, center_x, column, container, horizontal_space, row, scrollable, text,
-};
+use iced::widget::{button, center, center_x, column, container, row, scrollable, space, text};
 use iced::{Bottom, Center, Element, Fill, Font, Function, Task, Theme};
 
 #[derive(Debug, Default)]
@@ -199,7 +197,7 @@ impl Plan {
 
                     column![title, outcome.view(i, theme)].spacing(20).into()
                 })
-                .unwrap_or_else(|| horizontal_space().into());
+                .unwrap_or_else(|| space::horizontal().into());
 
             column![steps, current].spacing(10).into()
         };
@@ -291,7 +289,7 @@ fn error(error: &str) -> Element<'_, Message> {
 
 fn links(links: &[Url]) -> Element<'_, Message> {
     if links.is_empty() {
-        return horizontal_space().into();
+        return space::horizontal().into();
     }
 
     column(links.iter().map(|link| {

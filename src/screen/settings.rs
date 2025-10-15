@@ -6,8 +6,8 @@ use iced::border;
 use iced::font;
 use iced::padding;
 use iced::widget::{
-    button, center_x, center_y, column, container, float, grid, horizontal_space, hover,
-    right_center, row, scrollable, stack, svg, text, value, Svg,
+    button, center_x, center_y, column, container, float, grid, hover, right_center, row,
+    scrollable, space, stack, svg, text, value, Svg,
 };
 use iced::{Center, Element, Fill, Font, Shrink, Task, Theme};
 use iced_palace::widget::{ellipsized_text, typewriter};
@@ -131,7 +131,7 @@ impl Settings {
 
     pub fn theme<'a>(&'a self, current: &'a Theme) -> Element<'a, Message> {
         let swatch = |color| {
-            container(horizontal_space())
+            container(space::horizontal())
                 .width(10)
                 .height(10)
                 .style(move |_theme: &Theme| {

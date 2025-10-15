@@ -19,7 +19,7 @@ tokio.workspace = true
 tracing-subscriber.workspace = true
 
 iced.workspace = true
-iced.features = ["tokio", "sipper", "svg", "markdown", "highlighter", "system", "crisp", "debug"]
+iced.features = ["tokio", "sipper", "svg", "markdown", "highlighter", "sysinfo", "crisp", "debug"]
 
 iced_palace.workspace = true
 iced_palace.features = ["rand"]
@@ -72,13 +72,16 @@ large-enum-variant = "allow"
 
 [patch.crates-io]
 iced.git = "https://github.com/iced-rs/iced.git"
-iced.rev = "9d56b488cc08b7365fb1839ed47ef92f3ff0fa36"
+iced.rev = "869891bbf0babf182f7d50623f1c05d2b81595c5"
 
 iced_core.git = "https://github.com/iced-rs/iced.git"
-iced_core.rev = "9d56b488cc08b7365fb1839ed47ef92f3ff0fa36"
+iced_core.rev = "869891bbf0babf182f7d50623f1c05d2b81595c5"
+
+iced_widget.git = "https://github.com/iced-rs/iced.git"
+iced_widget.rev = "869891bbf0babf182f7d50623f1c05d2b81595c5"
 
 iced_palace.git = "https://github.com/hecrj/iced_palace.git"
-iced_palace.rev = "cb8f841b638c3886c6582e3d7f2e1de8c67e2e2b"
+iced_palace.rev = "e4de01dc22b06e6a50bfb319018dcbf41e259e78"
 
 llama-server.git = "https://github.com/hecrj/llama-server.git"
 llama-server.rev = "e7e016577ce11ff419628f5eca23732949990894"

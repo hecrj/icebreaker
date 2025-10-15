@@ -14,9 +14,9 @@ use iced::padding;
 use iced::task::{self, Task};
 use iced::time::{self, Duration, Instant};
 use iced::widget::{
-    self, bottom, bottom_right, button, center, center_x, center_y, column, container,
-    horizontal_space, hover, opaque, progress_bar, right, right_center, row, scrollable, sensor,
-    stack, text, text_editor, tooltip, value, vertical_space,
+    bottom, bottom_right, button, center, center_x, center_y, column, container, hover, opaque,
+    operation, progress_bar, right, right_center, row, scrollable, sensor, space, stack, text,
+    text_editor, tooltip, value,
 };
 use iced::Degrees;
 use iced::{Center, Color, Element, Fill, Font, Function, Shrink, Size, Subscription, Theme};
@@ -208,7 +208,7 @@ impl Conversation {
             Message::HeaderShown(bounds) => {
                 self.header_height = bounds.height;
 
-                Action::Run(Task::batch([widget::focus_next(), snap_chat_to_end()]))
+                Action::Run(Task::batch([operation::focus_next(), snap_chat_to_end()]))
             }
             Message::HeaderResized(bounds) => {
                 self.header_height = bounds.height;
@@ -401,7 +401,7 @@ impl Conversation {
                     *sending = None;
                 }
 
-                Action::Run(widget::focus_next())
+                Action::Run(operation::focus_next())
             }
             Message::Delete => {
                 if let Some(id) = self.id {
@@ -495,7 +495,7 @@ impl Conversation {
                     tip::Position::Left,
                 )
             } else {
-                horizontal_space().into()
+                space::horizontal().into()
             };
 
             let bar = hover(center_x(title).padding([0, 40]), right_center(delete));
@@ -597,7 +597,7 @@ impl Conversation {
             .into()
         } else {
             scrollable(column![
-                sensor(horizontal_space())
+                sensor(space::horizontal())
                     .key(self.id)
                     .on_resize(Message::ChatResized),
                 center_x(
@@ -674,7 +674,7 @@ impl Conversation {
             });
 
         let input = column![
-            container(horizontal_space())
+            container(space::horizontal())
                 .height(10)
                 .style(|theme: &Theme| container::Style {
                     background: Some(
@@ -699,7 +699,7 @@ impl Conversation {
                     .key(self.id)
                     .on_show(Message::HeaderShown)
                     .on_resize(Message::HeaderResized),
-                vertical_space(),
+                space::vertical(),
                 sensor(input)
                     .key(self.id)
                     .on_show(Message::InputResized)
@@ -894,5 +894,5 @@ impl Item {
 const CHAT: &str = "chat";
 
 fn snap_chat_to_end() -> Task<Message> {
-    scrollable::snap_to(CHAT, scrollable::RelativeOffset::END)
+    operation::snap_to(CHAT, scrollable::RelativeOffset::END)
 }

@@ -2,7 +2,7 @@ use crate::core::assistant;
 use crate::icon;
 
 use iced::time::Duration;
-use iced::widget::{button, column, row, text, vertical_rule};
+use iced::widget::{button, column, row, rule, text};
 use iced::{Element, Font, Shrink};
 
 #[derive(Debug, Clone)]
@@ -68,7 +68,7 @@ impl Reasoning {
 
             column![
                 toggle,
-                row![vertical_rule(1), thoughts].spacing(10).height(Shrink)
+                row![rule::vertical(1), thoughts].spacing(10).height(Shrink)
             ]
             .spacing(10)
             .into()

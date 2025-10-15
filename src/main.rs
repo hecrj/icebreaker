@@ -17,7 +17,7 @@ use crate::screen::settings;
 use crate::screen::Screen;
 
 use iced::system;
-use iced::widget::{button, column, container, row, rule, vertical_rule, vertical_space, Text};
+use iced::widget::{button, column, container, row, rule, space, Text};
 use iced::{Element, Fill, Subscription, Task, Theme};
 
 use std::mem;
@@ -73,7 +73,7 @@ impl Icebreaker {
             },
             Task::batch([
                 Task::future(Chat::fetch_last_opened()).then(|last_chat| {
-                    system::fetch_information()
+                    system::information()
                         .map(Box::new)
                         .map(move |system| Message::Loaded {
                             last_chat: last_chat.clone(),
@@ -239,7 +239,7 @@ impl Icebreaker {
                 }
                 Screen::Search(search) => search.sidebar(&self.library).map(Message::Search),
                 Screen::Settings(settings) => settings.sidebar().map(Message::Settings),
-                Screen::Loading => vertical_space().into(),
+                Screen::Loading => space::vertical().into(),
             };
 
             let tab = |icon: Text<'static>, toggled, message| {
@@ -298,7 +298,7 @@ impl Icebreaker {
                         container::Style::default()
                             .background(theme.extended_palette().background.weakest.color)
                     }),
-                vertical_rule(1).style(rule::weak),
+                rule::vertical(1).style(rule::weak),
             ]
         };
 

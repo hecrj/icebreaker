@@ -9,7 +9,7 @@ pub mod tip {
 use crate::icon;
 
 use iced::border;
-use iced::widget::{button, container, horizontal_space, iced, row, text, tooltip, Button, Text};
+use iced::widget::{button, container, iced, row, space, text, tooltip, Button, Text};
 use iced::{Center, Element, Fill, Font, Theme};
 
 pub fn tip<'a, Message: 'a>(
@@ -143,7 +143,7 @@ pub fn about<'a>() -> Element<'a, Link> {
         rust,
         text("and"),
         iced,
-        horizontal_space(),
+        space::horizontal(),
         text("Powered by"),
         hugging_face,
         text("and"),
