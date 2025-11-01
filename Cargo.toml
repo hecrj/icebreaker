@@ -72,16 +72,20 @@ large-enum-variant = "allow"
 
 [patch.crates-io]
 iced.git = "https://github.com/iced-rs/iced.git"
-iced.rev = "fe009142cf7e799249bde6debd2ac82114233a0d"
+iced.rev = "200e2673cdf2585ca7876abbd2747ed099dbcc06"
 
 iced_core.git = "https://github.com/iced-rs/iced.git"
-iced_core.rev = "fe009142cf7e799249bde6debd2ac82114233a0d"
+iced_core.rev = "200e2673cdf2585ca7876abbd2747ed099dbcc06"
 
 iced_widget.git = "https://github.com/iced-rs/iced.git"
-iced_widget.rev = "fe009142cf7e799249bde6debd2ac82114233a0d"
+iced_widget.rev = "200e2673cdf2585ca7876abbd2747ed099dbcc06"
 
 iced_palace.git = "https://github.com/hecrj/iced_palace.git"
 iced_palace.rev = "e4de01dc22b06e6a50bfb319018dcbf41e259e78"
 
 llama-server.git = "https://github.com/hecrj/llama-server.git"
 llama-server.rev = "e7e016577ce11ff419628f5eca23732949990894"
+
+# iced.path = "../../iced"
+# iced_core.path = "../../iced/core"
+# iced_widget.path = "../../iced/widget"

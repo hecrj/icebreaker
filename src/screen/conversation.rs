@@ -405,12 +405,19 @@ impl Conversation {
             }
             Message::Delete => {
                 if let Some(id) = self.id {
-                    Action::Run(Task::future(Chat::delete(id)).and_then(|_| {
-                        Task::batch([
-                            Task::perform(Chat::fetch_last_opened(), Message::LastChatFetched),
-                            Task::perform(Chat::list(), Message::ChatsListed),
-                        ])
-                    }))
+                    Action::Run(
+                        Task::future(Chat::delete(id))
+                            .map(Result::ok)
+                            .and_then(|_| {
+                                Task::batch([
+                                    Task::perform(
+                                        Chat::fetch_last_opened(),
+                                        Message::LastChatFetched,
+                                    ),
+                                    Task::perform(Chat::list(), Message::ChatsListed),
+                                ])
+                            }),
+                    )
                 } else {
                     Action::None
                 }
