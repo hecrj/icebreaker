@@ -1,3 +1,4 @@
+use crate::browser;
 use crate::icon;
 use crate::model;
 use crate::widget::sidebar;
@@ -69,7 +70,7 @@ impl Settings {
             }
             Message::ChangeTheme(theme) => Action::ChangeTheme(theme),
             Message::OpenTechne => {
-                let _ = open::that_in_background("https://github.com/hecrj/techne");
+                browser::open("https://github.com/hecrj/techne");
 
                 Action::None
             }

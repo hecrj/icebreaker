@@ -328,9 +328,20 @@ impl Icebreaker {
             Screen::Settings(_) => Subscription::none(),
         };
 
-        let hotkeys = keyboard::on_key_press(|key, _modifiers| match key {
-            keyboard::Key::Named(keyboard::key::Named::Escape) => Some(Message::Escape),
-            _ => None,
+        let hotkeys = keyboard::listen().filter_map(|event| {
+            let keyboard::Event::KeyPressed {
+                modified_key,
+                repeat: false,
+                ..
+            } = event
+            else {
+                return None;
+            };
+
+            match modified_key {
+                keyboard::Key::Named(keyboard::key::Named::Escape) => Some(Message::Escape),
+                _ => None,
+            }
         });
 
         Subscription::batch([screen, hotkeys])

@@ -12,11 +12,11 @@ icebreaker_core.workspace = true
 function.workspace = true
 itertools.workspace = true
 log.workspace = true
-open.workspace = true
 rand.workspace = true
 rfd.workspace = true
 tokio.workspace = true
 tracing-subscriber.workspace = true
+webbrowser.workspace = true
 
 iced.workspace = true
 iced.features = ["tokio", "sipper", "svg", "markdown", "highlighter", "sysinfo", "crisp", "debug"]
@@ -46,7 +46,6 @@ iced_palace = "0.14.0-dev"
 itertools = "0.13"
 llama-server = "0.1.0-dev"
 log = "0.4"
-open = "5.2"
 rand = "0.9"
 reqwest = "0.12"
 rfd = "0.15"
@@ -61,6 +60,7 @@ toml = "0.9"
 tracing-subscriber = "0.3"
 url = "2.5"
 uuid = "1.10"
+webbrowser = "1.0"
 
 [workspace.lints.rust]
 rust_2018_idioms = { level = "deny", priority = -1 }
@@ -72,13 +72,13 @@ large-enum-variant = "allow"
 
 [patch.crates-io]
 iced.git = "https://github.com/iced-rs/iced.git"
-iced.rev = "200e2673cdf2585ca7876abbd2747ed099dbcc06"
+iced.rev = "efb12cad2033c64ea44df549b5bddc2bbeb1a4ed"
 
 iced_core.git = "https://github.com/iced-rs/iced.git"
-iced_core.rev = "200e2673cdf2585ca7876abbd2747ed099dbcc06"
+iced_core.rev = "efb12cad2033c64ea44df549b5bddc2bbeb1a4ed"
 
 iced_widget.git = "https://github.com/iced-rs/iced.git"
-iced_widget.rev = "200e2673cdf2585ca7876abbd2747ed099dbcc06"
+iced_widget.rev = "efb12cad2033c64ea44df549b5bddc2bbeb1a4ed"
 
 iced_palace.git = "https://github.com/hecrj/iced_palace.git"
 iced_palace.rev = "e4de01dc22b06e6a50bfb319018dcbf41e259e78"

@@ -30,7 +30,7 @@ struct Viewer;
 
 #[derive(Debug, Clone)]
 pub enum Interaction {
-    Open(markdown::Url),
+    Open(markdown::Uri),
     Copy(String),
 }
 
@@ -38,7 +38,7 @@ impl Interaction {
     pub fn perform<Message>(self) -> Task<Message> {
         match self {
             Interaction::Open(url) => {
-                browser::open(&url);
+                browser::open(url);
 
                 Task::none()
             }
@@ -48,7 +48,7 @@ impl Interaction {
 }
 
 impl<'a> markdown::Viewer<'a, Interaction> for Viewer {
-    fn on_link_click(url: markdown::Url) -> Interaction {
+    fn on_link_click(url: markdown::Uri) -> Interaction {
         Interaction::Open(url)
     }
 
