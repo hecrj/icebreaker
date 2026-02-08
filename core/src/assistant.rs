@@ -1,9 +1,9 @@
-use crate::model;
 use crate::Error;
+use crate::model;
 
 use serde::Deserialize;
 use serde_json::json;
-use sipper::{sipper, FutureExt, Sipper, Straw, StreamExt};
+use sipper::{FutureExt, Sipper, Straw, StreamExt, sipper};
 
 use std::process::Stdio;
 use std::sync::Arc;
@@ -88,40 +88,30 @@ impl Assistant {
 
             let mut last_percent = None;
 
-            while let Some(stage) = server.sip().await {
-                match stage {
-                    llama_server::Stage::Downloading(artifact, progress) => {
-                        let percent =
-                            ((progress.downloaded as f32 / progress.total as f32) * 100.0) as u32;
+            while let Some(llama_server::Download { artifact, progress }) = server.sip().await {
+                let percent = ((progress.downloaded as f32 / progress.total as f32) * 100.0) as u32;
 
-                        if last_percent == Some(percent) {
-                            continue;
-                        }
-
-                        let component = match artifact {
-                            llama_server::Artifact::Server => "llama-server",
-                            llama_server::Artifact::Backend(backend) => match backend {
-                                llama_server::Backend::Cuda => "CUDA backend",
-                                llama_server::Backend::Hip => "ROCm backend",
-                            },
-                        };
-
-                        sender
-                            .progress(format!("Downloading {component}..."), percent)
-                            .await;
-
-                        sender
-                            .log_download(
-                                progress.downloaded,
-                                progress.total,
-                                progress.speed,
-                                percent,
-                            )
-                            .await;
-
-                        last_percent = Some(percent);
-                    }
+                if last_percent == Some(percent) {
+                    continue;
                 }
+
+                let component = match artifact {
+                    llama_server::Artifact::Server => "llama-server",
+                    llama_server::Artifact::Backend(backend) => match backend {
+                        llama_server::Backend::Cuda => "CUDA backend",
+                        llama_server::Backend::Hip => "ROCm backend",
+                    },
+                };
+
+                sender
+                    .progress(format!("Downloading {component}..."), percent)
+                    .await;
+
+                sender
+                    .log_download(progress.downloaded, progress.total, progress.speed, percent)
+                    .await;
+
+                last_percent = Some(percent);
             }
 
             let server = server.await?;
@@ -347,28 +337,28 @@ impl Assistant {
                             data.trim().strip_prefix("data: ").unwrap_or(data),
                         )?;
 
-                        if let Some(choice) = data.choices.first_mut() {
-                            if let Some(content) = &mut choice.delta.content {
-                                match is_reasoning {
-                                    None if content.contains("<think>") => {
-                                        is_reasoning = Some(true);
-                                        *content = content.replace("<think>", "");
-                                    }
-                                    Some(true) if content.contains("</think>") => {
-                                        is_reasoning = Some(false);
-                                        *content = content.replace("</think>", "");
-                                    }
-                                    _ => {}
+                        if let Some(choice) = data.choices.first_mut()
+                            && let Some(content) = &mut choice.delta.content
+                        {
+                            match is_reasoning {
+                                None if content.contains("<think>") => {
+                                    is_reasoning = Some(true);
+                                    *content = content.replace("<think>", "");
                                 }
-
-                                let _ = sender
-                                    .send(if is_reasoning.unwrap_or_default() {
-                                        Token::Reasoning(content.clone())
-                                    } else {
-                                        Token::Talking(content.clone())
-                                    })
-                                    .await;
+                                Some(true) if content.contains("</think>") => {
+                                    is_reasoning = Some(false);
+                                    *content = content.replace("</think>", "");
+                                }
+                                _ => {}
                             }
+
+                            let _ = sender
+                                .send(if is_reasoning.unwrap_or_default() {
+                                    Token::Reasoning(content.clone())
+                                } else {
+                                    Token::Talking(content.clone())
+                                })
+                                .await;
                         }
                     };
                 }

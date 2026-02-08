@@ -1,13 +1,13 @@
+use crate::Url;
 use crate::assistant;
 use crate::chat::{Id, Item};
 use crate::model;
 use crate::plan;
 use crate::web;
-use crate::Url;
 
 use futures::never::Never;
-use serde::de::{self, Deserializer, Error, MapAccess, Visitor};
 use serde::Deserialize;
+use serde::de::{self, Deserializer, Error, MapAccess, Visitor};
 
 use std::fmt;
 use std::marker::PhantomData;

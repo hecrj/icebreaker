@@ -1,13 +1,13 @@
 mod schema;
 
+use crate::Error;
 use crate::assistant::{self, Assistant, Reply, Token};
 use crate::directory;
 use crate::model;
 use crate::plan::{self, Plan};
-use crate::Error;
 
 use serde::{Deserialize, Serialize};
-use sipper::{sipper, Sipper, Straw};
+use sipper::{Sipper, Straw, sipper};
 use tokio::fs;
 use tokio::task;
 use uuid::Uuid;
@@ -84,16 +84,16 @@ impl Chat {
     }
 
     pub async fn save(self) -> Result<Self, Error> {
-        if let Ok(current) = Self::fetch(self.id).await {
-            if current.title != self.title {
-                let mut list = List::fetch().await?;
+        if let Ok(current) = Self::fetch(self.id).await
+            && current.title != self.title
+        {
+            let mut list = List::fetch().await?;
 
-                if let Some(entry) = list.entries.iter_mut().find(|entry| entry.id == self.id) {
-                    entry.title = self.title.clone();
-                }
-
-                list.save().await?;
+            if let Some(entry) = list.entries.iter_mut().find(|entry| entry.id == self.id) {
+                entry.title = self.title.clone();
             }
+
+            list.save().await?;
         }
 
         let (bytes, chat) = task::spawn_blocking(move || (schema::encode(&self), self)).await?;
@@ -157,7 +157,7 @@ pub fn complete(
     assistant: &Assistant,
     items: &[Item],
     strategy: Strategy,
-) -> impl Straw<(), Event, Error> {
+) -> impl Straw<(), Event, Error> + use<> {
     let assistant = assistant.clone();
     let history = history(items);
 
@@ -194,7 +194,7 @@ fn reply<'a>(
     })
 }
 
-pub fn title(assistant: &Assistant, items: &[Item]) -> impl Straw<String, String, Error> {
+pub fn title(assistant: &Assistant, items: &[Item]) -> impl Straw<String, String, Error> + use<> {
     let assistant = assistant.clone();
     let history = history(items);
 

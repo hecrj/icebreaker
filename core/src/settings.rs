@@ -1,8 +1,8 @@
+use crate::Error;
 use crate::directory;
 use crate::model;
-use crate::Error;
 
-use decoder::{decode, encode, Value};
+use decoder::{Value, decode, encode};
 use tokio::fs;
 
 use std::path::PathBuf;

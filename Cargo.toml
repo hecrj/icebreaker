@@ -25,7 +25,7 @@ iced_palace.workspace = true
 iced_palace.features = ["rand"]
 
 [build-dependencies]
-iced_fontello = "0.13"
+iced_fontello = "0.14"
 
 [lints]
 workspace = true
@@ -41,13 +41,13 @@ decoder = "0.0.3"
 directories = "6.0"
 function = "0.2"
 futures = "0.3"
-iced = "0.14.0-dev"
-iced_palace = "0.14.0-dev"
+iced = "0.14"
+iced_palace = "0.14"
 itertools = "0.13"
-llama-server = "0.1.0-dev"
+llama-server = "0.1.0"
 log = "0.4"
 rand = "0.9"
-reqwest = "0.12"
+reqwest = "0.13"
 rfd = "0.15"
 scraper = "0.22"
 serde = "1.0"
@@ -70,21 +70,21 @@ unused_results = "deny"
 [workspace.lints.clippy]
 large-enum-variant = "allow"
 
-[patch.crates-io]
-iced.git = "https://github.com/iced-rs/iced.git"
-iced.rev = "efb12cad2033c64ea44df549b5bddc2bbeb1a4ed"
+# [patch.crates-io]
+# iced.git = "https://github.com/iced-rs/iced.git"
+# iced.rev = "efb12cad2033c64ea44df549b5bddc2bbeb1a4ed"
 
-iced_core.git = "https://github.com/iced-rs/iced.git"
-iced_core.rev = "efb12cad2033c64ea44df549b5bddc2bbeb1a4ed"
+# iced_core.git = "https://github.com/iced-rs/iced.git"
+# iced_core.rev = "efb12cad2033c64ea44df549b5bddc2bbeb1a4ed"
 
-iced_widget.git = "https://github.com/iced-rs/iced.git"
-iced_widget.rev = "efb12cad2033c64ea44df549b5bddc2bbeb1a4ed"
+# iced_widget.git = "https://github.com/iced-rs/iced.git"
+# iced_widget.rev = "efb12cad2033c64ea44df549b5bddc2bbeb1a4ed"
 
-iced_palace.git = "https://github.com/hecrj/iced_palace.git"
-iced_palace.rev = "e4de01dc22b06e6a50bfb319018dcbf41e259e78"
+# iced_palace.git = "https://github.com/hecrj/iced_palace.git"
+# iced_palace.rev = "e4de01dc22b06e6a50bfb319018dcbf41e259e78"
 
-llama-server.git = "https://github.com/hecrj/llama-server.git"
-llama-server.rev = "e7e016577ce11ff419628f5eca23732949990894"
+# llama-server.git = "https://github.com/hecrj/llama-server.git"
+# llama-server.rev = "e7e016577ce11ff419628f5eca23732949990894"
 
 # iced.path = "../../iced"
 # iced_core.path = "../../iced/core"

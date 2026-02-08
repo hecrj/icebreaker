@@ -1,7 +1,7 @@
 use crate::Error;
 
 use reqwest::IntoUrl;
-use sipper::{sipper, Straw};
+use sipper::{Straw, sipper};
 use tokio::fs;
 use tokio::io::{self, AsyncWriteExt};
 

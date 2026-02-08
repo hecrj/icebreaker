@@ -1,7 +1,7 @@
 use crate::assistant::Message;
 use crate::{Assistant, Error, Url};
 
-use sipper::{sipper, Sipper, Straw};
+use sipper::{Sipper, Straw, sipper};
 use std::sync::LazyLock;
 
 pub struct Search {

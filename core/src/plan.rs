@@ -1,9 +1,9 @@
+use crate::Error;
 use crate::assistant::{Assistant, Message, Reasoning, Reply};
 use crate::web;
-use crate::Error;
 
 use serde::Deserialize;
-use sipper::{sipper, Sender, Sipper, Straw};
+use sipper::{Sender, Sipper, Straw, sipper};
 use url::Url;
 
 use std::collections::{BTreeMap, HashMap};

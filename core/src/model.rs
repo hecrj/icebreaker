@@ -1,10 +1,10 @@
+use crate::Error;
 use crate::directory;
 use crate::request;
-use crate::Error;
 
-use decoder::{decode, encode, Value};
+use decoder::{Value, decode, encode};
 use serde::{Deserialize, Serialize};
-use sipper::{sipper, Sipper, Straw};
+use sipper::{Sipper, Straw, sipper};
 use tokio::fs;
 
 use std::collections::BTreeMap;
