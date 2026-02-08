@@ -41,7 +41,7 @@ license = "MIT"
 repository = "https://github.com/hecrj/icebreaker"
 
 [workspace.dependencies]
-icebreaker_core.path = "./core"
+icebreaker_core = { version = "2026.2.0", path ="./core" }
 
 chrono = "0.4"
 decoder = "0.0.3"
