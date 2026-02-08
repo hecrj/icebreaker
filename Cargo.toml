@@ -1,11 +1,11 @@
 [package]
 name = "icebreaker"
-version = "0.1.0"
-authors = ["Héctor Ramón Jiménez <hector@hecrj.dev>"]
-edition = "2024"
 description = "A local AI chat app powered by 🦀Rust, 🧊iced, 🤗Hugging Face, and 🦙llama.cpp "
-license = "MIT"
-repository = "https://github.com/hecrj/icebreaker"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
 icebreaker_core.workspace = true
@@ -32,6 +32,13 @@ workspace = true
 
 [workspace]
 members = ["core"]
+
+[workspace.package]
+version = "2026.2.0"
+authors = ["Héctor Ramón Jiménez <hector@hecrj.dev>"]
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/hecrj/icebreaker"
 
 [workspace.dependencies]
 icebreaker_core.path = "./core"

@@ -1886,7 +1886,7 @@ dependencies = [
 
 [[package]]
 name = "icebreaker"
-version = "0.1.0"
+version = "2026.2.0"
 dependencies = [
  "function",
  "icebreaker_core",
@@ -1904,7 +1904,7 @@ dependencies = [
 
 [[package]]
 name = "icebreaker_core"
-version = "0.1.0"
+version = "2026.2.0"
 dependencies = [
  "chrono",
  "decoder",
