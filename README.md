@@ -19,7 +19,7 @@ A local AI chat app powered by 🦀 Rust, 🧊 iced, 🤗 Hugging Face, and 🦙
 No pre-built binaries yet! Use `cargo` to try it out:
 
 ```bash
-cargo install --git https://github.com/hecrj/icebreaker.git
+cargo install icebreaker
 ```
 
 ## Why "Icebreaker"?
