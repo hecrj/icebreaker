@@ -16,10 +16,16 @@ A local AI chat app powered by 🦀 Rust, 🧊 iced, 🤗 Hugging Face, and 🦙
 
 ## Installation
 
-No pre-built binaries yet! Use `cargo` to try it out:
+No pre-built binaries yet! Use `cargo` to try out the latest release:
 
 ```bash
 cargo install icebreaker
+```
+
+Or build directly from `master`:
+
+```bash
+cargo install --git https://github.com/hecrj/icebreaker.git
 ```
 
 ## Why "Icebreaker"?
