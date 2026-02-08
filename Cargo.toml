@@ -2,7 +2,7 @@
 name = "icebreaker"
 version = "0.1.0"
 authors = ["Héctor Ramón Jiménez <hector@hecrj.dev>"]
-edition = "2021"
+edition = "2024"
 description = "A local AI chat app powered by 🦀Rust, 🧊iced, 🤗Hugging Face, and 🦙llama.cpp "
 license = "MIT"
 repository = "https://github.com/hecrj/icebreaker"

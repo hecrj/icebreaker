@@ -9,7 +9,7 @@ pub mod tip {
 use crate::icon;
 
 use iced::border;
-use iced::widget::{button, container, iced, row, space, text, tooltip, Button, Text};
+use iced::widget::{Button, Text, button, container, iced, row, space, text, tooltip};
 use iced::{Center, Element, Fill, Font, Theme};
 
 pub fn tip<'a, Message: 'a>(

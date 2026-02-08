@@ -11,13 +11,13 @@ mod widget;
 use crate::core::assistant;
 use crate::core::model;
 use crate::core::{Chat, Error, Settings};
+use crate::screen::Screen;
 use crate::screen::conversation;
 use crate::screen::search;
 use crate::screen::settings;
-use crate::screen::Screen;
 
 use iced::system;
-use iced::widget::{button, column, container, row, rule, space, Text};
+use iced::widget::{Text, button, column, container, row, rule, space};
 use iced::{Element, Fill, Subscription, Task, Theme};
 
 use std::mem;

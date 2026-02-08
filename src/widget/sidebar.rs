@@ -1,5 +1,5 @@
 use iced::border;
-use iced::widget::{button, row, text, Text};
+use iced::widget::{Text, button, row, text};
 use iced::{Center, Element, Fill, Font, Length, Shrink};
 
 pub fn header<'a, Message: Clone + 'a>(

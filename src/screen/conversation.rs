@@ -1,13 +1,14 @@
+use crate::core::Error;
 use crate::core::assistant::{Assistant, Backend, BootEvent};
 use crate::core::chat::{self, Chat, Entry, Id, Strategy};
 use crate::core::model::{File, Library};
-use crate::core::Error;
 use crate::icon;
 use crate::ui::markdown;
 use crate::ui::plan;
 use crate::ui::{Markdown, Plan, Reply};
 use crate::widget::{copy, regenerate, sidebar, tip, toggle};
 
+use iced::Degrees;
 use iced::clipboard;
 use iced::gradient;
 use iced::padding;
@@ -18,7 +19,6 @@ use iced::widget::{
     operation, progress_bar, right, right_center, row, scrollable, sensor, space, stack, text,
     text_editor, tooltip, value,
 };
-use iced::Degrees;
 use iced::{Center, Color, Element, Fill, Font, Function, Shrink, Size, Subscription, Theme};
 use iced_palace::widget::ellipsized_text;
 

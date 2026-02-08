@@ -7,8 +7,8 @@ use iced::border;
 use iced::font;
 use iced::padding;
 use iced::widget::{
-    button, center_x, center_y, column, container, float, grid, hover, right_center, row,
-    scrollable, space, stack, svg, text, value, Svg,
+    Svg, button, center_x, center_y, column, container, float, grid, hover, right_center, row,
+    scrollable, space, stack, svg, text, value,
 };
 use iced::{Center, Element, Fill, Font, Shrink, Task, Theme};
 use iced_palace::widget::{ellipsized_text, typewriter};

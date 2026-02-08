@@ -1,8 +1,8 @@
 // Generated automatically by iced_fontello at build time.
 // Do not edit manually. Source: ../fonts/icebreaker-icons.toml
 // ba8ea74725fafb80ed416656b302e1e51535dbe4da1a4567b843de6b23280257
-use iced::widget::{text, Text};
 use iced::Font;
+use iced::widget::{Text, text};
 
 pub const FONT: &[u8] = include_bytes!("../fonts/icebreaker-icons.ttf");
 
