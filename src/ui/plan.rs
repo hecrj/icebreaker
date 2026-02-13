@@ -11,7 +11,7 @@ use iced::border;
 use iced::theme;
 use iced::time::seconds;
 use iced::widget::{button, center, center_x, column, container, row, scrollable, space, text};
-use iced::{Bottom, Center, Element, Fill, Font, Function, Task, Theme};
+use iced::{Bottom, Center, Element, Fill, Font, Function, Task, Theme, never};
 
 #[derive(Debug, Default)]
 pub struct Plan {
@@ -87,7 +87,7 @@ impl Plan {
 
                 Task::none()
             }
-            Message::Markdown(interaction) => interaction.perform(),
+            Message::Markdown(interaction) => interaction.perform().map(never),
             Message::OpenLink(url) => {
                 browser::open(&url);
 

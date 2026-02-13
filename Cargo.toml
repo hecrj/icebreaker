@@ -48,8 +48,8 @@ decoder = "0.0.3"
 directories = "6.0"
 function = "0.2"
 futures = "0.3"
-iced = "0.14"
-iced_palace = "0.14"
+iced = "0.15.0-dev"
+iced_palace = "0.15.0-dev"
 itertools = "0.13"
 llama-server = "0.1.0"
 log = "0.4"
@@ -77,18 +77,18 @@ unused_results = "deny"
 [workspace.lints.clippy]
 large-enum-variant = "allow"
 
-# [patch.crates-io]
-# iced.git = "https://github.com/iced-rs/iced.git"
-# iced.rev = "efb12cad2033c64ea44df549b5bddc2bbeb1a4ed"
+[patch.crates-io]
+iced.git = "https://github.com/iced-rs/iced.git"
+iced.rev = "06ca57e7394d81e8a2099af21008bdb1b84e6ff6"
 
-# iced_core.git = "https://github.com/iced-rs/iced.git"
-# iced_core.rev = "efb12cad2033c64ea44df549b5bddc2bbeb1a4ed"
+iced_core.git = "https://github.com/iced-rs/iced.git"
+iced_core.rev = "06ca57e7394d81e8a2099af21008bdb1b84e6ff6"
 
-# iced_widget.git = "https://github.com/iced-rs/iced.git"
-# iced_widget.rev = "efb12cad2033c64ea44df549b5bddc2bbeb1a4ed"
+iced_widget.git = "https://github.com/iced-rs/iced.git"
+iced_widget.rev = "06ca57e7394d81e8a2099af21008bdb1b84e6ff6"
 
-# iced_palace.git = "https://github.com/hecrj/iced_palace.git"
-# iced_palace.rev = "e4de01dc22b06e6a50bfb319018dcbf41e259e78"
+iced_palace.git = "https://github.com/hecrj/iced_palace.git"
+iced_palace.rev = "4cdf05a7e28792b37b2717d5869de7e3ffc31cdc"
 
 # llama-server.git = "https://github.com/hecrj/llama-server.git"
 # llama-server.rev = "e7e016577ce11ff419628f5eca23732949990894"

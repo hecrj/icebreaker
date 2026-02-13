@@ -19,7 +19,9 @@ use iced::widget::{
     operation, progress_bar, right, right_center, row, scrollable, sensor, space, stack, text,
     text_editor, tooltip, value,
 };
-use iced::{Center, Color, Element, Fill, Font, Function, Shrink, Size, Subscription, Theme};
+use iced::{
+    Center, Color, Element, Fill, Font, Function, Shrink, Size, Subscription, Theme, never,
+};
 use iced_palace::widget::ellipsized_text;
 
 pub struct Conversation {
@@ -343,7 +345,7 @@ impl Conversation {
 
                 Action::None
             }
-            Message::Copy(content) => Action::Run(clipboard::write(content)),
+            Message::Copy(content) => Action::Run(clipboard::write(content).discard()),
             Message::ToggleReasoning(index, show) => {
                 if let Some(Item::Reply(reply)) = self.history.get_mut(index) {
                     reply.toggle_reasoning(show);
@@ -429,7 +431,7 @@ impl Conversation {
 
                 Action::Run(plan.update(message).map(Message::Plan.with(index)))
             }
-            Message::Markdown(interaction) => Action::Run(interaction.perform()),
+            Message::Markdown(interaction) => Action::Run(interaction.perform().map(never)),
             Message::Booted(Err(error))
             | Message::Created(Err(error))
             | Message::Saved(Err(error))
