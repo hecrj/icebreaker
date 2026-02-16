@@ -675,7 +675,7 @@ impl Conversation {
                 background: Some(
                     gradient::Linear::new(0)
                         .add_stop(0.0, Color::TRANSPARENT)
-                        .add_stop(0.1, theme.palette().background.scale_alpha(0.95))
+                        .add_stop(0.1, theme.palette().background.scale_alpha(0.98))
                         .add_stop(1.0, theme.palette().background)
                         .into(),
                 ),
