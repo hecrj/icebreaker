@@ -22,6 +22,10 @@ pub fn chat<'a>() -> Text<'a> {
     icon("\u{E0AC}")
 }
 
+pub fn letters<'a>() -> Text<'a> {
+    icon("\u{01C5}")
+}
+
 pub fn check<'a>() -> Text<'a> {
     icon("\u{2713}")
 }
