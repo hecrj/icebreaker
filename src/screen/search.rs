@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::core::model;
 use crate::core::{Error, Model};
 use crate::icon;
@@ -7,13 +9,31 @@ use iced::border;
 use iced::font;
 use iced::time::Duration;
 use iced::widget::{
-    button, center, center_x, column, container, grid, operation, right, row, rule, scrollable,
-    space, text, text_input, value,
+    Text, button, center, center_x, column, container, grid, operation, right, row, rule,
+    scrollable, space, text, text_input, value,
 };
 use iced::{Center, Element, Fill, Font, Right, Shrink, Task, Theme};
 use iced_palace::widget::ellipsized_text;
 
 use function::Binary;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SortBy {
+    Id,
+    Downloads,
+    Likes,
+    Date,
+}
+impl Display for SortBy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Id => write!(f, "Name"),
+            Self::Downloads => write!(f, "Most Downloads"),
+            Self::Likes => write!(f, "Most Likes"),
+            Self::Date => write!(f, "Newest"),
+        }
+    }
+}
 
 pub struct Search {
     models: Vec<Model>,
@@ -21,6 +41,7 @@ pub struct Search {
     search_temperature: usize,
     is_searching: bool,
     mode: Mode,
+    sort: SortBy,
 }
 
 #[derive(Debug, Clone)]
@@ -32,6 +53,7 @@ pub enum Message {
     DetailsFetched(model::Id, Result<model::Details, Error>),
     FilesListed(model::Id, Result<model::Files, Error>),
     Boot(model::File),
+    SortChanged(SortBy),
     Back,
 }
 
@@ -59,12 +81,33 @@ impl Search {
                 search_temperature: 0,
                 is_searching: true,
                 mode: Mode::Search,
+                sort: SortBy::Id,
             },
             Task::batch([
                 Task::perform(Model::list(), Message::ModelsListed),
                 operation::focus_next(),
             ]),
         )
+    }
+
+    fn sort(&mut self) {
+        match &self.sort {
+            SortBy::Id => {
+                self.models.sort_by(|a, b| a.id.name().cmp(b.id.name()));
+            }
+            SortBy::Downloads => {
+                self.models
+                    .sort_by(|a, b| a.downloads.count().cmp(&b.downloads.count()).reverse());
+            }
+            SortBy::Likes => {
+                self.models
+                    .sort_by(|a, b| a.likes.count().cmp(&b.likes.count()).reverse());
+            }
+            SortBy::Date => {
+                self.models
+                    .sort_by(|a, b| a.last_modified.cmp(&b.last_modified).reverse());
+            }
+        }
     }
 
     pub fn title(&self) -> &str {
@@ -79,6 +122,7 @@ impl Search {
             Message::ModelsListed(Ok(models)) => {
                 self.models = models;
                 self.is_searching = false;
+                self.sort();
 
                 Action::None
             }
@@ -159,6 +203,11 @@ impl Search {
 
                 Action::None
             }
+            Message::SortChanged(new) => {
+                self.sort = new;
+                self.sort();
+                Action::None
+            }
         }
     }
 
@@ -174,6 +223,36 @@ impl Search {
     }
 
     pub fn search(&self) -> Element<'_, Message> {
+        //We place the sort button
+        // as four _push-buttons_
+
+        fn sortbutton<'a>(icon: Text<'a>, active: SortBy, this: SortBy) -> Element<'a, Message> {
+            //NOTE: we only register events, if they'd change the state. This effectively deactivates
+            // the currently selected sorting button
+            let base_button = button(
+                container(icon.size(15).style(text::secondary).line_height(1.0)).align_y(Center),
+            )
+            .padding([4, 7])
+            .style(button::subtle);
+
+            if active == this {
+                base_button.into()
+            } else {
+                base_button.on_press(Message::SortChanged(this)).into()
+            }
+        }
+
+        let sort = column![
+            row![
+                sortbutton(icon::letters(), self.sort, SortBy::Id),
+                sortbutton(icon::download(), self.sort, SortBy::Downloads),
+                sortbutton(icon::star(), self.sort, SortBy::Likes),
+                sortbutton(icon::clock(), self.sort, SortBy::Date),
+            ]
+            .spacing(2),
+        ]
+        .spacing(2);
+
         let search = text_input("Search language models...", &self.search)
             .size(20)
             .padding(10)
@@ -224,7 +303,18 @@ impl Search {
             }
         };
 
-        column![search, models].spacing(10).into()
+        column![
+            column![
+                search,
+                center(sort.width(Shrink).height(Shrink))
+                    .height(Shrink)
+                    .width(Fill)
+            ]
+            .spacing(5),
+            models
+        ]
+        .spacing(10)
+        .into()
     }
 
     pub fn details<'a>(
