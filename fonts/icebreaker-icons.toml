@@ -1,6 +1,7 @@
 module = "icon"
 
 [glyphs]
+stop = "fontawesome-stop"
 clipboard = "fontawesome-docs"
 clock = "fontawesome-clock"
 download = "fontawesome-download"

@@ -15,9 +15,9 @@ use iced::padding;
 use iced::task::{self, Task};
 use iced::time::{self, Duration, Instant};
 use iced::widget::{
-    bottom, bottom_right, button, center, center_x, center_y, column, container, hover, opaque,
-    operation, progress_bar, right, right_center, row, scrollable, sensor, space, stack, text,
-    text_editor, tooltip, value,
+    bottom, button, center, center_x, center_y, column, container, hover, opaque, operation,
+    progress_bar, right, right_center, row, scrollable, sensor, space, stack, text, text_editor,
+    tooltip, value,
 };
 use iced::{
     Center, Color, Element, Fill, Font, Function, Shrink, Size, Subscription, Theme, never,
@@ -69,6 +69,7 @@ pub enum Message {
     InputResized(Size),
     ToggleSearch,
     Submit,
+    Stop,
     Regenerate(usize),
     Chatting(chat::Event),
     Chatted(Result<(), Error>),
@@ -341,6 +342,15 @@ impl Conversation {
 
                 if let State::Running { sending, .. } = &mut self.state {
                     *sending = None;
+                }
+
+                Action::None
+            }
+            Message::Stop => {
+                if let State::Running { sending, .. } = &mut self.state {
+                    if let Some(handle) = sending.take() {
+                        handle.abort();
+                    }
                 }
 
                 Action::None
@@ -653,7 +663,14 @@ impl Conversation {
                     }
                 });
 
-            let strategy = {
+            let input_overlay = {
+                let is_sending = match &self.state {
+                    State::Running {
+                        sending: Some(_), ..
+                    } => true,
+                    _ => false,
+                };
+
                 let search = tip(
                     toggle(icon::globe(), "Search", self.strategy.search)
                         .on_press(Message::ToggleSearch),
@@ -661,10 +678,27 @@ impl Conversation {
                     tip::Position::Left,
                 );
 
-                bottom_right(search).padding(10)
+                let buttons = if is_sending {
+                    row![
+                        search,
+                        space::horizontal(),
+                        button(
+                            row![icon::stop().size(14), text(" Stop").size(14)]
+                                .align_y(Center)
+                                .spacing(5),
+                        )
+                        .padding([8, 16])
+                        .style(button::primary)
+                        .on_press(Message::Stop),
+                    ]
+                } else {
+                    row![search]
+                };
+
+                bottom(buttons.width(Fill)).padding(10)
             };
 
-            container(stack![editor, strategy])
+            container(stack![editor, input_overlay])
                 .width(Shrink)
                 .max_width(600)
         };
