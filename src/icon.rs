@@ -1,6 +1,6 @@
 // Generated automatically by iced_fontello at build time.
 // Do not edit manually. Source: ../fonts/icebreaker-icons.toml
-// ba8ea74725fafb80ed416656b302e1e51535dbe4da1a4567b843de6b23280257
+// 23966aeabeffde0af7a2518a5503e5003a828dc7000bc56a235623ff330956cb
 use iced::Font;
 use iced::widget::{Text, text};
 
@@ -92,6 +92,10 @@ pub fn sliders<'a>() -> Text<'a> {
 
 pub fn star<'a>() -> Text<'a> {
     icon("\u{2605}")
+}
+
+pub fn stop<'a>() -> Text<'a> {
+    icon("\u{25AA}")
 }
 
 pub fn trash<'a>() -> Text<'a> {
