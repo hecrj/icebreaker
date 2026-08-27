@@ -45,7 +45,7 @@ pub fn item<'a, Message: Clone + 'a>(
             };
 
             if is_active {
-                let background = theme.extended_palette().background.weak;
+                let background = theme.palette().background.weak;
 
                 button::Style {
                     background: Some(background.color.into()),

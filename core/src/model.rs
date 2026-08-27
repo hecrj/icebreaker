@@ -32,7 +32,6 @@ impl Model {
 
         let request = client.get(format!("{API_URL}/models")).query(&[
             ("search", query.as_ref()),
-            ("filter", "text-generation"),
             ("filter", "gguf"),
             ("limit", "100"),
             ("full", "true"),

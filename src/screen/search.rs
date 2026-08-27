@@ -10,8 +10,7 @@ use iced::widget::{
     button, center, center_x, column, container, grid, operation, right, row, rule, scrollable,
     space, text, text_input, value,
 };
-use iced::{Center, Element, Fill, Font, Right, Shrink, Task, Theme};
-use iced_palace::widget::ellipsized_text;
+use iced::{Center, Element, Fill, Fit, Font, Right, Shrink, Task, Theme};
 
 use function::Binary;
 
@@ -260,12 +259,13 @@ impl Search {
                 row![
                     text(model.author()).size(18),
                     text("/").size(18),
-                    ellipsized_text(model.name())
+                    text(model.name())
                         .size(20)
                         .font(Font {
                             weight: font::Weight::Semibold,
                             ..Font::MONOSPACE
                         })
+                        .ellipsis(text::Ellipsis::Middle)
                         .wrapping(text::Wrapping::None)
                 ]
                 .align_y(Center)
@@ -298,7 +298,7 @@ impl Search {
         scrollable(center_x(
             column![back, header, download]
                 .spacing(20)
-                .max_width(600)
+                .width(Fit.max(600))
                 .clip(true),
         ))
         .spacing(10)
@@ -323,8 +323,9 @@ impl Search {
         }
 
         let library = column(library.files().iter().map(|file| {
-            let title = ellipsized_text(file.model.name())
+            let title = text(file.model.name())
                 .font(Font::MONOSPACE)
+                .ellipsis(text::Ellipsis::End)
                 .wrapping(text::Wrapping::None);
 
             let author = row![
@@ -383,8 +384,9 @@ fn model_card(model: &Model) -> Element<'_, Message> {
         .into()
     }
 
-    let title = ellipsized_text(model.id.name())
+    let title = text(model.id.name())
         .font(Font::MONOSPACE)
+        .ellipsis(text::Ellipsis::End)
         .wrapping(text::Wrapping::None);
 
     let metadata = row![
@@ -403,7 +405,7 @@ fn model_card(model: &Model) -> Element<'_, Message> {
         .width(Fill)
         .padding(10)
         .style(|theme, status| {
-            let palette = theme.extended_palette();
+            let palette = theme.palette();
 
             let base = button::Style {
                 background: Some(palette.background.weakest.color.into()),
@@ -471,7 +473,7 @@ pub fn view_files<'a>(
 
                 if is_ready {
                     button::Style {
-                        border: base.border.color(theme.palette().primary).width(1),
+                        border: base.border.color(theme.seed().primary).width(1),
                         ..base
                     }
                 } else {

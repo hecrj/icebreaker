@@ -19,10 +19,7 @@ use iced::widget::{
     operation, progress_bar, right, right_center, row, scrollable, sensor, space, stack, text,
     text_editor, tooltip, value,
 };
-use iced::{
-    Center, Color, Element, Fill, Font, Function, Shrink, Size, Subscription, Theme, never,
-};
-use iced_palace::widget::ellipsized_text;
+use iced::{Center, Color, Element, Fill, Fit, Font, Function, Size, Subscription, Theme, never};
 
 pub struct Conversation {
     backend: Backend,
@@ -546,7 +543,7 @@ impl Conversation {
                                 bar.style(progress_bar::danger)
                             },
                             center(stage.style(|theme: &Theme| text::Style {
-                                color: Some(theme.palette().background)
+                                color: Some(theme.seed().background)
                             }))
                             .clip(true)
                         ]
@@ -617,7 +614,7 @@ impl Conversation {
                             .map(|(i, item)| item.view(i, theme)),
                     )
                     .padding(padding::all(20).top(0))
-                    .max_width(600),
+                    .width(Fit.max(600)),
                 )
                 .padding(padding::top(self.header_height).bottom(self.input_height))
             ])
@@ -632,8 +629,10 @@ impl Conversation {
                 .placeholder("Type your message here...")
                 .on_action(Message::InputChanged)
                 .padding(padding::all(15).bottom(50))
-                .min_height(16.0 * 1.3 * 2.0) // approx. 2 lines with 1.3 line height
-                .max_height(16.0 * 1.3 * 20.0) // approx. 20 lines
+                .height(
+                    Fit.min(16.0 * 1.3 * 2.0) // approx. 2 lines with 1.3 line height
+                        .max(16.0 * 1.3 * 20.0),
+                ) // approx. 20 lines
                 .key_binding(|key_press| {
                     let modifiers = key_press.modifiers;
 
@@ -664,9 +663,7 @@ impl Conversation {
                 bottom_right(search).padding(10)
             };
 
-            container(stack![editor, strategy])
-                .width(Shrink)
-                .max_width(600)
+            container(stack![editor, strategy]).width(Fit.max(600))
         };
 
         let header = container(header)
@@ -675,8 +672,8 @@ impl Conversation {
                 background: Some(
                     gradient::Linear::new(0)
                         .add_stop(0.0, Color::TRANSPARENT)
-                        .add_stop(0.1, theme.palette().background.scale_alpha(0.98))
-                        .add_stop(1.0, theme.palette().background)
+                        .add_stop(0.1, theme.seed().background.scale_alpha(0.98))
+                        .add_stop(1.0, theme.seed().background)
                         .into(),
                 ),
                 ..container::Style::default()
@@ -689,7 +686,7 @@ impl Conversation {
                     background: Some(
                         gradient::Linear::new(Degrees(180.0))
                             .add_stop(0.0, Color::TRANSPARENT)
-                            .add_stop(1.0, theme.palette().background)
+                            .add_stop(1.0, theme.seed().background)
                             .into(),
                     ),
                     ..container::Style::default()
@@ -726,9 +723,10 @@ impl Conversation {
 
         let chats = column(self.chats.iter().map(|chat| {
             let card = match &chat.title {
-                Some(title) => ellipsized_text(title),
-                None => ellipsized_text(chat.file.model.name()).font(Font::MONOSPACE),
+                Some(title) => text(title),
+                None => text(chat.file.model.name()).font(Font::MONOSPACE),
             }
+            .ellipsis(text::Ellipsis::End)
             .wrapping(text::Wrapping::None);
 
             let is_active = Some(&chat.id) == self.id.as_ref();
@@ -822,7 +820,7 @@ impl Item {
                 let message = container(
                     container(markdown.view(theme).map(Message::Markdown))
                         .style(|theme: &Theme| {
-                            let palette = theme.extended_palette();
+                            let palette = theme.palette();
 
                             container::Style {
                                 background: Some(palette.background.weak.color.into()),

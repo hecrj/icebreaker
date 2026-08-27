@@ -249,7 +249,7 @@ impl Icebreaker {
                     .on_press_maybe(message)
                     .width(Fill)
                     .style(move |theme: &Theme, status| {
-                        let palette = theme.extended_palette();
+                        let palette = theme.palette();
 
                         let base = button::text(theme, status);
 
@@ -287,8 +287,7 @@ impl Icebreaker {
             ])
             .padding(10)
             .style(|theme| {
-                container::Style::default()
-                    .background(theme.extended_palette().background.weaker.color)
+                container::Style::default().background(theme.palette().background.weaker.color)
             });
 
             row![
@@ -296,7 +295,7 @@ impl Icebreaker {
                     .width(250)
                     .style(|theme| {
                         container::Style::default()
-                            .background(theme.extended_palette().background.weakest.color)
+                            .background(theme.palette().background.weakest.color)
                     }),
                 rule::vertical(1).style(rule::weak),
             ]

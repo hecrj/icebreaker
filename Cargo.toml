@@ -25,7 +25,7 @@ iced_palace.workspace = true
 iced_palace.features = ["rand"]
 
 [build-dependencies]
-iced_fontello = "0.14"
+iced_fontello = "0.15.0-dev"
 
 [lints]
 workspace = true
@@ -79,16 +79,19 @@ large-enum-variant = "allow"
 
 [patch.crates-io]
 iced.git = "https://github.com/iced-rs/iced.git"
-iced.rev = "06ca57e7394d81e8a2099af21008bdb1b84e6ff6"
+iced.rev = "e4f9b4a1d68e00b9b8c22ddc0524f1558ca478bf"
 
 iced_core.git = "https://github.com/iced-rs/iced.git"
-iced_core.rev = "06ca57e7394d81e8a2099af21008bdb1b84e6ff6"
+iced_core.rev = "e4f9b4a1d68e00b9b8c22ddc0524f1558ca478bf"
 
 iced_widget.git = "https://github.com/iced-rs/iced.git"
-iced_widget.rev = "06ca57e7394d81e8a2099af21008bdb1b84e6ff6"
+iced_widget.rev = "e4f9b4a1d68e00b9b8c22ddc0524f1558ca478bf"
 
 iced_palace.git = "https://github.com/hecrj/iced_palace.git"
-iced_palace.rev = "4cdf05a7e28792b37b2717d5869de7e3ffc31cdc"
+iced_palace.rev = "a8bf35ffae706a2bc3741d396b63c35d5dd32304"
+
+iced_fontello.git = "https://github.com/hecrj/iced_fontello.git"
+iced_fontello.rev = "2e6d61ee5a869443a249e7ee46a460665ce4969d"
 
 # llama-server.git = "https://github.com/hecrj/llama-server.git"
 # llama-server.rev = "e7e016577ce11ff419628f5eca23732949990894"

@@ -11,7 +11,7 @@ use iced::border;
 use iced::theme;
 use iced::time::seconds;
 use iced::widget::{button, center, center_x, column, container, row, scrollable, space, text};
-use iced::{Bottom, Center, Element, Fill, Font, Function, Task, Theme, never};
+use iced::{Bottom, Center, Element, Fill, Fit, Font, Function, Task, Theme, never};
 
 #[derive(Debug, Default)]
 pub struct Plan {
@@ -265,7 +265,7 @@ pub enum Stage {
 
 impl Stage {
     fn color(self, theme: &Theme) -> theme::palette::Pair {
-        let palette = theme.extended_palette();
+        let palette = theme.palette();
 
         match self {
             Stage::Pending => palette.secondary.base,
@@ -360,7 +360,7 @@ fn summary_grid(summaries: &[web::Summary], stage: Stage) -> Element<'_, Message
                 Stage::Done => scrollable::Anchor::Start,
                 _ => scrollable::Anchor::End,
             }))
-            .max_height(150)
+            .height(Fit.max(150))
             .padding(10)
             .style(container::dark)
         };

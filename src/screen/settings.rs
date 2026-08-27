@@ -10,8 +10,8 @@ use iced::widget::{
     Svg, button, center_x, center_y, column, container, float, grid, hover, right_center, row,
     scrollable, space, stack, svg, text, value,
 };
-use iced::{Center, Element, Fill, Font, Shrink, Task, Theme};
-use iced_palace::widget::{ellipsized_text, typewriter};
+use iced::{Center, Element, Fill, Fit, Font, Shrink, Task, Theme};
+use iced_palace::widget::typewriter;
 
 use std::path::PathBuf;
 use std::sync::LazyLock;
@@ -47,7 +47,7 @@ impl Settings {
                 themes: Theme::ALL
                     .iter()
                     .sorted_by_key(|theme| {
-                        (theme.palette().background.relative_luminance() * 1_000.0) as u32
+                        (theme.seed().background.relative_luminance() * 1_000.0) as u32
                     })
                     .rev()
                     .cloned()
@@ -98,7 +98,7 @@ impl Settings {
         };
 
         center_y(scrollable(
-            center_x(container(section).max_width(600)).padding(20),
+            center_x(container(section).width(Fit.max(600))).padding(20),
         ))
         .into()
     }
@@ -144,12 +144,13 @@ impl Settings {
         };
 
         let themes = self.themes.iter().map(|theme| {
-            let palette = theme.palette();
+            let palette = theme.seed();
 
             let item = button(
-                ellipsized_text(theme.to_string())
+                text(theme.to_string())
                     .font(Font::MONOSPACE)
                     .width(Fill)
+                    .ellipsis(text::Ellipsis::End)
                     .wrapping(text::Wrapping::None)
                     .center(),
             )
@@ -162,7 +163,7 @@ impl Settings {
 
                 if current == theme {
                     button::Style {
-                        border: style.border.color(current.palette().primary).width(3),
+                        border: style.border.color(current.seed().primary).width(3),
                         ..style
                     }
                 } else {
@@ -249,7 +250,7 @@ impl Section {
                 .width(16)
                 .height(16)
                 .style(|theme: &Theme, _status| svg::Style {
-                    color: Some(theme.palette().text),
+                    color: Some(theme.seed().text),
                 })
                 .into(),
         }
@@ -261,6 +262,6 @@ fn mcp() -> Svg<'static> {
         LazyLock::new(|| svg::Handle::from_memory(include_bytes!("../../assets/mcp.svg")));
 
     svg(ICON.clone()).style(|theme: &Theme, _status| svg::Style {
-        color: Some(theme.palette().text),
+        color: Some(theme.seed().text),
     })
 }

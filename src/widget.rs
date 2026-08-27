@@ -52,7 +52,7 @@ pub fn toggle<'a, Message: 'a>(
         button::Style {
             border: border::rounded(5),
             text_color: if is_toggled {
-                theme.palette().primary
+                theme.seed().primary
             } else {
                 style.text_color
             },
