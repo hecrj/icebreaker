@@ -2,8 +2,6 @@ use crate::Url;
 use crate::assistant;
 use crate::chat::{Id, Item};
 use crate::model;
-use crate::plan;
-use crate::web;
 
 use futures::never::Never;
 use serde::Deserialize;
@@ -35,7 +33,6 @@ impl Message {
         match self {
             Message::User(content) => Item::User(content),
             Message::Reply(reply) => Item::Reply(reply.into_data()),
-            Message::Plan(plan) => Item::Plan(plan.into_data()),
         }
     }
 }

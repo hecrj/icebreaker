@@ -1,16 +1,13 @@
 pub mod sidebar;
 
-pub use iced_palace::widget::diffused_text;
-
 pub mod tip {
     pub use super::tooltip::Position;
 }
 
 use crate::icon;
 
-use iced::border;
-use iced::widget::{Button, Text, button, container, iced, row, space, text, tooltip};
-use iced::{Center, Element, Fill, Font, Theme};
+use iced::widget::{Text, button, container, iced, row, space, text, tooltip};
+use iced::{Center, Element, Font};
 
 pub fn tip<'a, Message: 'a>(
     target: impl Into<Element<'a, Message>>,
@@ -25,40 +22,6 @@ pub fn tip<'a, Message: 'a>(
         position,
     )
     .into()
-}
-
-pub fn toggle<'a, Message: 'a>(
-    icon: Text<'a>,
-    label: &'a str,
-    is_toggled: bool,
-) -> Button<'a, Message> {
-    button(
-        row![
-            if is_toggled { icon::check() } else { icon }
-                .width(12)
-                .size(12)
-                .center()
-                .line_height(1.0),
-            text(label).size(12)
-        ]
-        .spacing(8)
-        .height(Fill)
-        .align_y(Center),
-    )
-    .height(30)
-    .style(move |theme: &Theme, status| {
-        let style = button::background(theme, status);
-
-        button::Style {
-            border: border::rounded(5),
-            text_color: if is_toggled {
-                theme.seed().primary
-            } else {
-                style.text_color
-            },
-            ..style
-        }
-    })
 }
 
 pub fn copy<'a, Message>(on_press: impl Fn() -> Message + 'a) -> Element<'a, Message>

@@ -1,12 +1,11 @@
 use crate::core::Error;
 use crate::core::assistant::{Assistant, Backend, BootEvent};
-use crate::core::chat::{self, Chat, Entry, Id, Strategy};
+use crate::core::chat::{self, Chat, Entry, Id};
 use crate::core::model::{File, Library};
 use crate::icon;
 use crate::ui::markdown;
-use crate::ui::plan;
-use crate::ui::{Markdown, Plan, Reply};
-use crate::widget::{copy, regenerate, sidebar, tip, toggle};
+use crate::ui::{Markdown, Reply};
+use crate::widget::{copy, regenerate, sidebar, tip};
 
 use iced::Degrees;
 use iced::clipboard;
@@ -15,9 +14,9 @@ use iced::padding;
 use iced::task::{self, Task};
 use iced::time::{self, Duration, Instant};
 use iced::widget::{
-    bottom, bottom_right, button, center, center_x, center_y, column, container, hover, opaque,
-    operation, progress_bar, right, right_center, row, scrollable, sensor, space, stack, text,
-    text_editor, tooltip, value,
+    bottom, button, center, center_x, center_y, column, container, hover, opaque, operation,
+    progress_bar, right, right_center, row, scrollable, sensor, space, stack, text, text_editor,
+    tooltip, value,
 };
 use iced::{Center, Color, Element, Fill, Fit, Font, Function, Size, Subscription, Theme, never};
 
@@ -33,7 +32,6 @@ pub struct Conversation {
     chat_width: f32,
     input_height: f32,
     total_width: f32,
-    strategy: Strategy,
     error: Option<Error>,
 }
 
@@ -64,7 +62,6 @@ pub enum Message {
     HeaderResized(Size),
     ChatResized(Size),
     InputResized(Size),
-    ToggleSearch,
     Submit,
     Regenerate(usize),
     Chatting(chat::Event),
@@ -80,7 +77,6 @@ pub enum Message {
     LastChatFetched(Result<Chat, Error>),
     Delete,
     New,
-    Plan(usize, plan::Message),
     Markdown(markdown::Interaction),
 }
 
@@ -117,7 +113,6 @@ impl Conversation {
                 chat_width: 0.0,
                 input_height: 0.0,
                 total_width: 0.0,
-                strategy: Strategy::default(),
                 error: None,
                 chats: Vec::new(),
             },
@@ -224,11 +219,6 @@ impl Conversation {
 
                 Action::None
             }
-            Message::ToggleSearch => {
-                self.strategy.search = !self.strategy.search;
-
-                Action::None
-            }
             Message::Submit => {
                 let State::Running { assistant, sending } = &mut self.state else {
                     return Action::None;
@@ -248,7 +238,7 @@ impl Conversation {
                 });
 
                 let (send, handle) = Task::sip(
-                    chat::complete(assistant, &self.history.to_data(), self.strategy),
+                    chat::complete(assistant, &self.history.to_data()),
                     Message::Chatting,
                     Message::Chatted,
                 )
@@ -266,7 +256,7 @@ impl Conversation {
                 self.history.truncate(index);
 
                 let (send, handle) = Task::sip(
-                    chat::complete(assistant, &self.history.to_data(), self.strategy),
+                    chat::complete(assistant, &self.history.to_data()),
                     Message::Chatting,
                     Message::Chatted,
                 )
@@ -293,18 +283,6 @@ impl Conversation {
                 chat::Event::ReplyChanged(new_reply) => {
                     if let Some(Item::Reply(reply)) = self.history.last_mut() {
                         reply.update(new_reply);
-                    }
-
-                    Action::None
-                }
-                chat::Event::PlanAdded => {
-                    self.history.push(Item::Plan(Plan::default()));
-
-                    Action::None
-                }
-                chat::Event::PlanChanged(event) => {
-                    if let Some(Item::Plan(plan)) = self.history.last_mut() {
-                        plan.apply(event);
                     }
 
                     Action::None
@@ -420,13 +398,6 @@ impl Conversation {
                 } else {
                     Action::None
                 }
-            }
-            Message::Plan(index, message) => {
-                let Some(Item::Plan(plan)) = self.history.items.get_mut(index) else {
-                    return Action::None;
-                };
-
-                Action::Run(plan.update(message).map(Message::Plan.with(index)))
             }
             Message::Markdown(interaction) => Action::Run(interaction.perform().map(never)),
             Message::Booted(Err(error))
@@ -628,9 +599,9 @@ impl Conversation {
             let editor = text_editor(&self.input)
                 .placeholder("Type your message here...")
                 .on_action(Message::InputChanged)
-                .padding(padding::all(15).bottom(50))
+                .padding(15)
                 .height(
-                    Fit.min(16.0 * 1.3 * 2.0) // approx. 2 lines with 1.3 line height
+                    Fit.min(16.0 * 1.3 * 3.0) // approx. 3 lines with 1.3 line height
                         .max(16.0 * 1.3 * 20.0),
                 ) // approx. 20 lines
                 .key_binding(|key_press| {
@@ -652,18 +623,7 @@ impl Conversation {
                     }
                 });
 
-            let strategy = {
-                let search = tip(
-                    toggle(icon::globe(), "Search", self.strategy.search)
-                        .on_press(Message::ToggleSearch),
-                    "Very Experimental!",
-                    tip::Position::Left,
-                );
-
-                bottom_right(search).padding(10)
-            };
-
-            container(stack![editor, strategy]).width(Fit.max(600))
+            container(editor).width(Fit.max(600))
         };
 
         let header = container(header)
@@ -808,7 +768,6 @@ impl History {
 pub enum Item {
     User { content: String, markdown: Markdown },
     Reply(Reply),
-    Plan(Plan),
 }
 
 impl Item {
@@ -847,9 +806,6 @@ impl Item {
                 ),
                 index,
             ),
-            Self::Plan(plan) => {
-                self.with_actions(plan.view(theme).map(Message::Plan.with(index)), index)
-            }
         }
     }
 
@@ -871,10 +827,6 @@ impl Item {
         match self {
             Self::User { content, .. } => content.clone(),
             Self::Reply(reply) => reply.to_text(),
-            Self::Plan { .. } => {
-                // TODO
-                "TODO".to_owned()
-            }
         }
     }
 
@@ -885,7 +837,6 @@ impl Item {
                 content,
             },
             chat::Item::Reply(reply) => Self::Reply(Reply::from_data(reply)),
-            chat::Item::Plan(plan) => Self::Plan(Plan::from_data(plan)),
         }
     }
 
@@ -893,7 +844,6 @@ impl Item {
         match self {
             Self::User { content, .. } => chat::Item::User(content.clone()),
             Self::Reply(reply) => chat::Item::Reply(reply.to_data()),
-            Self::Plan(plan) => chat::Item::Plan(plan.to_data()),
         }
     }
 }

@@ -4,7 +4,6 @@ use crate::Error;
 use crate::assistant::{self, Assistant, Reply, Token};
 use crate::directory;
 use crate::model;
-use crate::plan::{self, Plan};
 
 use serde::{Deserialize, Serialize};
 use sipper::{Sipper, Straw, sipper};
@@ -28,7 +27,6 @@ pub struct Chat {
 pub enum Item {
     User(String),
     Reply(Reply),
-    Plan(Plan),
 }
 
 impl Chat {
@@ -142,36 +140,16 @@ impl fmt::Debug for Chat {
 pub enum Event {
     ReplyAdded,
     ReplyChanged(Reply),
-    PlanAdded,
-    PlanChanged(plan::Event),
 }
 
 const SYSTEM_PROMPT: &str = "You are a helpful assistant.";
 
-#[derive(Debug, Clone, Copy, Default)]
-pub struct Strategy {
-    pub search: bool,
-}
-
-pub fn complete(
-    assistant: &Assistant,
-    items: &[Item],
-    strategy: Strategy,
-) -> impl Straw<(), Event, Error> + use<> {
+pub fn complete(assistant: &Assistant, items: &[Item]) -> impl Straw<(), Event, Error> + use<> {
     let assistant = assistant.clone();
     let history = history(items);
 
-    sipper(move |mut sender| async move {
-        if strategy.search {
-            let _ = sender.send(Event::PlanAdded).await;
-
-            Plan::search(&assistant, &history)
-                .with(Event::PlanChanged)
-                .run(&sender)
-                .await?;
-        } else {
-            reply(&assistant, &history).run(sender).await?;
-        }
+    sipper(move |sender| async move {
+        reply(&assistant, &history).run(sender).await?;
 
         Ok(())
     })
@@ -353,10 +331,6 @@ fn history(items: &[Item]) -> Vec<assistant::Message> {
         .flat_map(|item| match item {
             Item::User(query) => vec![assistant::Message::User(query.clone())],
             Item::Reply(reply) => vec![assistant::Message::Assistant(reply.content.clone())],
-            Item::Plan(plan) => plan
-                .answers()
-                .map(|reply| assistant::Message::Assistant(reply.content.clone()))
-                .collect(),
         })
         .collect()
 }
