@@ -288,7 +288,7 @@ impl Assistant {
                         port = Self::HOST_PORT
                     ))
                     .json(&json!({
-                        "model": format!("{model}", model = self.name()),
+                        "model": self.name().to_string(),
                         "messages": messages,
                         "stream": true,
                         "cache_prompt": true,
