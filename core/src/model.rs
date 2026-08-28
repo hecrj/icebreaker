@@ -141,6 +141,12 @@ impl Details {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 pub struct Downloads(u64);
 
+impl Downloads {
+    pub fn count(&self) -> u64 {
+        self.0
+    }
+}
+
 impl fmt::Display for Downloads {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0 {
@@ -159,6 +165,12 @@ impl fmt::Display for Downloads {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 pub struct Likes(u64);
+
+impl Likes {
+    pub fn count(&self) -> u64 {
+        self.0
+    }
+}
 
 impl fmt::Display for Likes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
